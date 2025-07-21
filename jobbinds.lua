@@ -155,6 +155,7 @@ local function load_profile(jobid, subjobid)
         printf('Loaded jobbinds profile: %s', profile_filename)
         -- Update the config UI with the current profile
         config_ui.set_current_profile(profile_filename)
+        config_ui.load_profile(profile_path)  -- Load bindings into UI
         debugf('Successfully loaded and updated UI with profile: %s', profile_filename)
         return true
     else
@@ -179,8 +180,9 @@ local function handle_job_change()
     
     -- Unload previous profile
     unload_profile(last_profile_keys)
-    -- Clear the config UI profile name
+    -- Clear the config UI profile name and bindings
     config_ui.set_current_profile(nil)
+    config_ui.load_profile(nil)  -- Clear UI bindings
     
     -- Update job tracking
     last_job, last_subjob = jobid, subjobid
