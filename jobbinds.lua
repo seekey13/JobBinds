@@ -38,7 +38,6 @@ local function errorf(fmt, ...) print(string.format('[JobBinds] ERROR: ' .. fmt,
 local last_job = nil
 local last_subjob = nil
 local last_profile_keys = {}
-local jobbinds_delay = 10 -- seconds delay after job/subjob change
 
 -- Helper: Get current job and subjob
 local function get_current_jobs()
@@ -139,20 +138,26 @@ local function handle_job_change()
     if jobid == last_job and subjobid == last_subjob then
         return
     end
+    
+    printf('Job change detected: %s/%s -> %s/%s', 
+           last_job and get_job_shortname(last_job) or 'nil',
+           last_subjob and get_job_shortname(last_subjob) or 'nil',
+           get_job_shortname(jobid), 
+           get_job_shortname(subjobid))
+    
     -- Unload previous profile
     unload_profile(last_profile_keys)
+    
+    -- Update job tracking
     last_job, last_subjob = jobid, subjobid
     last_profile_keys = nil
 
-    -- Delay before loading new profile
-    ashita.tasks.once(jobbinds_delay, function()
-        -- Load new profile
-        local loaded = load_profile(jobid, subjobid)
-        if loaded then
-            -- Track keys for future unload
-            last_profile_keys = read_profile_keys(get_profile_path(jobid, subjobid))
-        end
-    end)
+    -- Load new profile immediately
+    local loaded = load_profile(jobid, subjobid)
+    if loaded then
+        -- Track keys for future unload
+        last_profile_keys = read_profile_keys(get_profile_path(jobid, subjobid))
+    end
 end
 
 -- Initial load event
