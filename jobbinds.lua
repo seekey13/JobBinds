@@ -19,6 +19,7 @@ addon.desc      = 'Automatically loads keybind profile scripts based on current 
 addon.link      = 'https://github.com/seekey13/jobbinds';
 
 require('common');
+local config_ui = require('config_ui');
 
 -- Blacklist keys (cannot be bound/unbound by this addon)
 local KEY_BLACKLIST = {
@@ -33,11 +34,19 @@ local KEY_BLACKLIST = {
 -- Helper functions for printing
 local function printf(fmt, ...)  print(string.format('[JobBinds] ' .. fmt, ...)) end
 local function errorf(fmt, ...) print(string.format('[JobBinds] ERROR: ' .. fmt, ...)) end
+local function debugf(fmt, ...) 
+    if debug_mode then
+        print(string.format('[JobBinds] DEBUG: ' .. fmt, ...)) 
+    end
+end
 
 -- Holds the last loaded job/subjob profile info
 local last_job = nil
 local last_subjob = nil
 local last_profile_keys = {}
+
+-- Debug mode flag (off by default)
+local debug_mode = false
 
 -- Helper: Get current job and subjob
 local function get_current_jobs()
@@ -52,6 +61,7 @@ local function get_current_jobs()
         errorf('Failed to get job/subjob from party object.')
         return nil, nil
     end
+    debugf('Current jobs detected: Main=%d, Sub=%d', job, subjob)
     return job, subjob
 end
 
@@ -79,8 +89,10 @@ end
 
 -- Helper: Read profile keys from .txt file
 local function read_profile_keys(profile_path)
+    debugf('Reading profile keys from: %s', profile_path)
     local ok, lines = pcall(function() return io.lines(profile_path) end)
     if not ok or not lines then
+        debugf('Failed to read profile file: %s', profile_path)
         return nil
     end
     local keys = {}
@@ -88,22 +100,33 @@ local function read_profile_keys(profile_path)
         local b = line:match('^/bind%s+([!@#%^+%w]+)')
         if b and not KEY_BLACKLIST[b] then
             keys[#keys+1] = b
+            debugf('Found bindable key: %s', b)
+        elseif b and KEY_BLACKLIST[b] then
+            debugf('Skipped blacklisted key: %s', b)
         end
     end
+    debugf('Total keys found: %d', #keys)
     return keys
 end
 
 -- Unbind previous job profile keys
 local function unload_profile(keys)
-    if not keys then return end
+    if not keys then 
+        debugf('No keys to unbind')
+        return 
+    end
+    debugf('Unbinding %d keys', #keys)
     for _, key in ipairs(keys) do
         if not KEY_BLACKLIST[key] then
+            debugf('Unbinding key: %s', key)
             local ok = pcall(function()
                 AshitaCore:GetChatManager():QueueCommand(-1, string.format('/unbind %s', key))
             end)
             if not ok then
                 errorf("Failed to unbind key: %s", key)
             end
+        else
+            debugf('Skipped unbinding blacklisted key: %s', key)
         end
     end
     printf('Previous job/subjob binds unloaded.')
@@ -112,21 +135,30 @@ end
 -- Load new profile via /exec
 local function load_profile(jobid, subjobid)
     local profile_path = get_profile_path(jobid, subjobid)
+    local profile_filename = get_profile_filename(jobid, subjobid)
+    debugf('Attempting to load profile: %s', profile_path)
+    
     -- Ensure file exists
     local file = io.open(profile_path, "r")
     if not file then
         errorf('Profile %s not found.', profile_path)
+        debugf('Profile file does not exist at: %s', profile_path)
         return false
     end
     file:close()
+    debugf('Profile file exists, executing: %s', profile_filename)
+    
     local ok = pcall(function()
-        AshitaCore:GetChatManager():QueueCommand(-1, string.format('/exec %s', get_profile_filename(jobid, subjobid)))
+        AshitaCore:GetChatManager():QueueCommand(-1, string.format('/exec %s', profile_filename))
     end)
     if ok then
-        printf('Loaded jobbinds profile: %s', get_profile_filename(jobid, subjobid))
+        printf('Loaded jobbinds profile: %s', profile_filename)
+        -- Update the config UI with the current profile
+        config_ui.set_current_profile(profile_filename)
+        debugf('Successfully loaded and updated UI with profile: %s', profile_filename)
         return true
     else
-        errorf('Failed to load profile: %s', get_profile_filename(jobid, subjobid))
+        errorf('Failed to load profile: %s', profile_filename)
         return false
     end
 end
@@ -147,6 +179,8 @@ local function handle_job_change()
     
     -- Unload previous profile
     unload_profile(last_profile_keys)
+    -- Clear the config UI profile name
+    config_ui.set_current_profile(nil)
     
     -- Update job tracking
     last_job, last_subjob = jobid, subjobid
@@ -177,6 +211,7 @@ end)
 ashita.events.register('packet_in', 'jobbinds_packet_in', function(e)
     -- 0x1B = job info, 0x44 = character update, 0x1A = party update; all candidates
     if (e.id == 0x1B or e.id == 0x44 or e.id == 0x1A) then
+        debugf('Received packet 0x%02X, scheduling job change check', e.id)
         ashita.tasks.once(0.5, function()
             handle_job_change()
         end)
@@ -185,6 +220,44 @@ end)
 
 -- On zone change (optional: could unload/reload profile, but FFXI job changes are not zone-based)
 -- You could hook 0x0A (zone enter) if needed.
+
+-- Command handler for /jobbinds
+ashita.events.register('command', 'jobbinds_command', function(e)
+    local args = e.command:args()
+    if #args == 0 or args[1]:lower() ~= '/jobbinds' then
+        return
+    end
+    
+    e.blocked = true
+    
+    if #args == 1 then
+        -- No additional arguments, show the config UI
+        config_ui.show()
+        printf('Opening JobBinds configuration window.')
+    elseif #args == 2 and args[2]:lower() == 'debug' then
+        -- Toggle debug mode
+        debug_mode = not debug_mode
+        config_ui.set_debug_mode(debug_mode)  -- Update UI debug mode
+        printf('Debug mode %s.', debug_mode and 'enabled' or 'disabled')
+        if debug_mode then
+            debugf('Debug information will now be displayed.')
+            debugf('Current state: last_job=%s, last_subjob=%s', 
+                   last_job and get_job_shortname(last_job) or 'nil',
+                   last_subjob and get_job_shortname(last_subjob) or 'nil')
+            debugf('Profile keys tracked: %d', last_profile_keys and #last_profile_keys or 0)
+        end
+    else
+        -- Handle unknown commands
+        printf('Usage: /jobbinds [debug]')
+        printf('  /jobbinds       - Open configuration window')
+        printf('  /jobbinds debug - Toggle debug information')
+    end
+end)
+
+-- Render loop for ImGui
+ashita.events.register('d3d_present', 'jobbinds_render', function()
+    config_ui.render()
+end)
 
 -- For future: Add a /jobbinds debug command, or more options.
 
