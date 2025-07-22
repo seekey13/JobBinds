@@ -326,6 +326,36 @@ function config_ui.render()
                 binding.is_macro = config_ui.is_macro[1]
                 binding.macro_content = config_ui.macro_text[1]
                 
+                -- If this is a macro binding, update the macro file
+                if binding.is_macro and binding.command:match('^/exec%s+(.+)$') then
+                    local macro_name = binding.command:match('^/exec%s+(.+)$')
+                    local scripts_path = string.format('%s/scripts', AshitaCore:GetInstallPath())
+                    local macro_file_path = string.format('%s/%s.txt', scripts_path, macro_name)
+                    
+                    -- Create scripts directory if it doesn't exist
+                    local dir_ok = pcall(function()
+                        os.execute('mkdir "' .. scripts_path .. '" 2>nul')
+                    end)
+                    
+                    -- Write updated macro content to file
+                    local macro_file = io.open(macro_file_path, 'w')
+                    if macro_file then
+                        local content = config_ui.macro_text[1]
+                        if content ~= '' then
+                            macro_file:write(content)
+                        end
+                        macro_file:close()
+                        
+                        if config_ui.debug_mode then
+                            print('[JobBinds] Updated macro file: ' .. macro_file_path)
+                        end
+                    else
+                        if config_ui.debug_mode then
+                            print('[JobBinds] Failed to update macro file: ' .. macro_file_path)
+                        end
+                    end
+                end
+                
                 -- Generate new bind command
                 local new_bind_command = generate_bind_command(binding)
                 local new_key_part = new_bind_command:match('/bind%s+([!@#%^+%w]+)')
@@ -424,8 +454,11 @@ function config_ui.render()
         local prev_macro_state = config_ui.is_macro[1]
         imgui.Checkbox('Macro', config_ui.is_macro);
         
-        -- If macro checkbox was just checked, generate exec command
+        -- If macro checkbox was just checked, generate exec command and create macro file
         if config_ui.is_macro[1] and not prev_macro_state then
+            -- Capture existing command before we overwrite it
+            local existing_command = config_ui.command_text[1]
+            
             -- Generate exec command based on current profile and binding
             local profile_base = config_ui.current_profile
             if profile_base and profile_base ~= 'No Profile Loaded' then
@@ -454,13 +487,56 @@ function config_ui.render()
                     binding_suffix = 'R' -- Default suffix if no key selected
                 end
                 
-                -- Generate the exec command
-                local exec_command = string.format('/exec %s_%s', profile_base, binding_suffix)
+                -- Generate the exec command and macro filename
+                local macro_name = string.format('%s_%s', profile_base, binding_suffix)
+                local exec_command = '/exec ' .. macro_name
                 config_ui.command_text[1] = exec_command
                 
-                if config_ui.debug_mode then
-                    print('[JobBinds] Generated macro command: ' .. exec_command)
+                -- Create the macro file in scripts folder
+                local scripts_path = string.format('%s/scripts', AshitaCore:GetInstallPath())
+                local macro_file_path = string.format('%s/%s.txt', scripts_path, macro_name)
+                
+                -- Create scripts directory if it doesn't exist
+                local dir_ok = pcall(function()
+                    os.execute('mkdir "' .. scripts_path .. '" 2>nul')
+                end)
+                
+                -- Write macro content to file
+                local macro_file = io.open(macro_file_path, 'w')
+                if macro_file then
+                    local content = config_ui.macro_text[1]
+                    
+                    -- If there was an existing command (not an /exec command), add it as first line
+                    if existing_command ~= '' and not existing_command:match('^/exec%s+') then
+                        if content == '' then
+                            content = existing_command
+                        else
+                            content = existing_command .. '\n' .. content
+                        end
+                        -- Also update the macro text field to show the existing command
+                        if config_ui.macro_text[1] == '' then
+                            config_ui.macro_text[1] = existing_command
+                        else
+                            config_ui.macro_text[1] = existing_command .. '\n' .. config_ui.macro_text[1]
+                        end
+                        if config_ui.debug_mode then
+                            print('[JobBinds] Added existing command to macro: ' .. existing_command)
+                        end
+                    end
+                    
+                    macro_file:write(content)
+                    macro_file:close()
+                    
+                    if config_ui.debug_mode then
+                        print('[JobBinds] Created macro file: ' .. macro_file_path)
+                        print('[JobBinds] Generated macro command: ' .. exec_command)
+                    end
+                else
+                    if config_ui.debug_mode then
+                        print('[JobBinds] Failed to create macro file: ' .. macro_file_path)
+                    end
                 end
+                
             else
                 config_ui.command_text[1] = '/exec PROFILE_R'
                 if config_ui.debug_mode then
