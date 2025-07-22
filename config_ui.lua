@@ -419,7 +419,55 @@ function config_ui.render()
         end
         
         imgui.SameLine();
+        
+        -- Store previous macro state to detect changes
+        local prev_macro_state = config_ui.is_macro[1]
         imgui.Checkbox('Macro', config_ui.is_macro);
+        
+        -- If macro checkbox was just checked, generate exec command
+        if config_ui.is_macro[1] and not prev_macro_state then
+            -- Generate exec command based on current profile and binding
+            local profile_base = config_ui.current_profile
+            if profile_base and profile_base ~= 'No Profile Loaded' then
+                -- Remove .txt extension if present
+                profile_base = profile_base:gsub('%.txt$', '')
+                
+                -- Generate binding suffix from key and modifiers
+                local binding_suffix = ''
+                if config_ui.binding_key[1] ~= '' then
+                    local key_part = config_ui.binding_key[1]
+                    
+                    -- Add modifier prefixes
+                    if config_ui.shift_modifier[1] then
+                        binding_suffix = 'S' .. binding_suffix
+                    end
+                    if config_ui.alt_modifier[1] then
+                        binding_suffix = 'A' .. binding_suffix
+                    end
+                    if config_ui.ctrl_modifier[1] then
+                        binding_suffix = 'C' .. binding_suffix
+                    end
+                    
+                    -- Add key name
+                    binding_suffix = binding_suffix .. key_part
+                else
+                    binding_suffix = 'R' -- Default suffix if no key selected
+                end
+                
+                -- Generate the exec command
+                local exec_command = string.format('/exec %s_%s', profile_base, binding_suffix)
+                config_ui.command_text[1] = exec_command
+                
+                if config_ui.debug_mode then
+                    print('[JobBinds] Generated macro command: ' .. exec_command)
+                end
+            else
+                config_ui.command_text[1] = '/exec PROFILE_R'
+                if config_ui.debug_mode then
+                    print('[JobBinds] No profile loaded, using default macro command')
+                end
+            end
+        end
         
         -- Show multiline text field if macro is enabled
         if config_ui.is_macro[1] then
