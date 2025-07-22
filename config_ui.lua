@@ -19,6 +19,65 @@ config_ui.debug_mode = false; -- Debug mode flag, controlled by main addon
 
 -- Current bindings loaded from profile file
 local current_bindings = {};
+local current_profile_path = nil; -- Track the current profile file path
+
+-- Function to generate bind command string from binding data
+local function generate_bind_command(binding)
+    local key_part = binding.key
+    local modifiers = {}
+    
+    -- Parse modifiers back to FFXI format
+    if binding.modifiers and binding.modifiers ~= '' then
+        for modifier in binding.modifiers:gmatch('[^+]+') do
+            if modifier == 'Ctrl' then
+                key_part = '^' .. key_part
+            elseif modifier == 'Alt' then
+                key_part = '!' .. key_part
+            elseif modifier == 'Shift' then
+                key_part = '@' .. key_part
+            elseif modifier == 'Win' then
+                key_part = '#' .. key_part
+            end
+        end
+    end
+    
+    return string.format('/bind %s %s', key_part, binding.command)
+end
+
+-- Function to save bindings back to profile file
+local function save_bindings_to_profile()
+    if not current_profile_path then
+        if config_ui.debug_mode then
+            print('[JobBinds] No profile path available for saving')
+        end
+        return false
+    end
+    
+    local file = io.open(current_profile_path, 'w')
+    if not file then
+        if config_ui.debug_mode then
+            print('[JobBinds] Could not open profile file for writing: ' .. current_profile_path)
+        end
+        return false
+    end
+    
+    -- Write all bindings
+    for _, binding in ipairs(current_bindings) do
+        local bind_command = generate_bind_command(binding)
+        file:write(bind_command .. '\n')
+        if config_ui.debug_mode then
+            print('[JobBinds] Wrote binding: ' .. bind_command)
+        end
+    end
+    
+    file:close()
+    
+    if config_ui.debug_mode then
+        print('[JobBinds] Saved ' .. #current_bindings .. ' bindings to: ' .. current_profile_path)
+    end
+    
+    return true
+end
 
 -- Function to parse a bind command line
 local function parse_bind_line(line)
@@ -116,6 +175,7 @@ local function load_bindings_from_profile(profile_path)
     end
     
     current_bindings = {} -- Clear existing bindings
+    current_profile_path = profile_path -- Store the profile path for saving
     
     if not profile_path then
         if config_ui.debug_mode then
@@ -232,7 +292,65 @@ function config_ui.render()
         imgui.SameLine();
         
         if imgui.Button('Save', { 80, 0 }) then
-            -- TODO: Add save binding logic
+            -- Save current binding changes
+            if config_ui.selected_binding > 0 and config_ui.selected_binding <= #current_bindings then
+                -- Get the old binding for unbinding
+                local old_binding = current_bindings[config_ui.selected_binding]
+                local old_bind_command = generate_bind_command(old_binding)
+                local old_key_part = old_bind_command:match('/bind%s+([!@#%^+%w]+)')
+                
+                -- Update the selected binding with current editor values
+                local binding = current_bindings[config_ui.selected_binding]
+                binding.key = config_ui.binding_key[1]:upper()
+                
+                -- Build modifiers string
+                local modifiers = {}
+                if config_ui.shift_modifier[1] then table.insert(modifiers, 'Shift') end
+                if config_ui.alt_modifier[1] then table.insert(modifiers, 'Alt') end
+                if config_ui.ctrl_modifier[1] then table.insert(modifiers, 'Ctrl') end
+                binding.modifiers = table.concat(modifiers, '+')
+                
+                binding.command = config_ui.command_text[1]
+                binding.is_macro = config_ui.is_macro[1]
+                binding.macro_content = config_ui.macro_text[1]
+                
+                -- Generate new bind command
+                local new_bind_command = generate_bind_command(binding)
+                local new_key_part = new_bind_command:match('/bind%s+([!@#%^+%w]+)')
+                
+                -- Apply changes in-game: unbind old key, bind new key
+                if old_key_part then
+                    local unbind_command = '/unbind ' .. old_key_part
+                    local ok = pcall(function()
+                        AshitaCore:GetChatManager():QueueCommand(-1, unbind_command)
+                    end)
+                    if config_ui.debug_mode then
+                        print('[JobBinds] Executed: ' .. unbind_command .. (ok and ' [SUCCESS]' or ' [FAILED]'))
+                    end
+                end
+                
+                if new_key_part then
+                    local ok = pcall(function()
+                        AshitaCore:GetChatManager():QueueCommand(-1, new_bind_command)
+                    end)
+                    if config_ui.debug_mode then
+                        print('[JobBinds] Executed: ' .. new_bind_command .. (ok and ' [SUCCESS]' or ' [FAILED]'))
+                    end
+                end
+                
+                if config_ui.debug_mode then
+                    print('[JobBinds] Updated binding: ' .. binding.key .. 
+                          (binding.modifiers ~= '' and (' (' .. binding.modifiers .. ')') or '') .. 
+                          ' -> ' .. binding.command)
+                end
+            end
+            
+            -- Save all bindings to file
+            if save_bindings_to_profile() then
+                print('[JobBinds] Profile saved successfully')
+            else
+                print('[JobBinds] Failed to save profile')
+            end
         end
         
         imgui.SameLine();
