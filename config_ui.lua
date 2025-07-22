@@ -294,6 +294,50 @@ function config_ui.render()
         if imgui.Button('Save', { 80, 0 }) then
             -- Check if we have valid data to save
             if config_ui.binding_key[1] ~= '' and config_ui.command_text[1] ~= '' then
+                -- If no profile is loaded, create a new one
+                if not current_profile_path or config_ui.current_profile == 'No Profile Loaded' then
+                    -- Generate a default profile name based on current job (if available) or use a generic name
+                    local profile_name = 'NEW_PROFILE'
+                    
+                    -- Try to get current job information from Ashita
+                    local player = AshitaCore:GetMemoryManager():GetPlayer()
+                    if player then
+                        local main_job = player:GetMainJob()
+                        local sub_job = player:GetSubJob()
+                        if main_job and main_job > 0 and sub_job and sub_job > 0 then
+                            -- Convert job IDs to abbreviations (basic mapping)
+                            local job_names = {
+                                [1] = "WAR", [2] = "MNK", [3] = "WHM", [4] = "BLM", [5] = "RDM", [6] = "THF",
+                                [7] = "PLD", [8] = "DRK", [9] = "BST", [10] = "BRD", [11] = "RNG", [12] = "SAM",
+                                [13] = "NIN", [14] = "DRG", [15] = "SMN", [16] = "BLU", [17] = "COR", [18] = "PUP",
+                                [19] = "DNC", [20] = "SCH", [21] = "GEO", [22] = "RUN"
+                            }
+                            local main_job_name = job_names[main_job] or "JOB"
+                            local sub_job_name = job_names[sub_job] or "SUB"
+                            profile_name = main_job_name .. "_" .. sub_job_name
+                        end
+                    end
+                    
+                    -- Create the profile file path in scripts folder
+                    local scripts_path = string.format('%s/scripts', AshitaCore:GetInstallPath())
+                    current_profile_path = string.format('%s/%s.txt', scripts_path, profile_name)
+                    config_ui.current_profile = profile_name .. '.txt'
+                    
+                    -- Ensure the directory exists
+                    local dir_ok = pcall(function()
+                        os.execute('mkdir "' .. scripts_path .. '" 2>nul')
+                    end)
+                    
+                    if config_ui.debug_mode then
+                        print('[JobBinds] Creating new profile in scripts folder: ' .. current_profile_path)
+                    end
+                    
+                    -- Initialize empty bindings list if needed
+                    if #current_bindings == 0 then
+                        current_bindings = {}
+                    end
+                end
+                
                 local old_key_part = nil
                 local binding = nil
                 
@@ -400,9 +444,71 @@ function config_ui.render()
         imgui.SameLine();
         
         if imgui.Button('Delete', { 80, 0 }) then
-            -- TODO: Add delete binding logic
-            if config_ui.selected_binding > 0 then
-                -- Logic to delete selected binding
+            if config_ui.selected_binding > 0 and config_ui.selected_binding <= #current_bindings then
+                local binding = current_bindings[config_ui.selected_binding]
+                
+                -- Generate unbind command to remove in-game binding
+                local bind_command = generate_bind_command(binding)
+                local key_part = bind_command:match('/bind%s+([!@#%^+%w]+)')
+                
+                if key_part then
+                    local unbind_command = '/unbind ' .. key_part
+                    local ok = pcall(function()
+                        AshitaCore:GetChatManager():QueueCommand(-1, unbind_command)
+                    end)
+                    if config_ui.debug_mode then
+                        print('[JobBinds] Executed: ' .. unbind_command .. (ok and ' [SUCCESS]' or ' [FAILED]'))
+                    end
+                end
+                
+                -- If this is a macro binding, delete the macro script file
+                if binding.is_macro and binding.command:match('^/exec%s+(.+)$') then
+                    local macro_name = binding.command:match('^/exec%s+(.+)$')
+                    local scripts_path = string.format('%s/scripts', AshitaCore:GetInstallPath())
+                    local macro_file_path = string.format('%s/%s.txt', scripts_path, macro_name)
+                    
+                    -- Delete the macro file
+                    local delete_ok = pcall(function()
+                        os.remove(macro_file_path)
+                    end)
+                    
+                    if config_ui.debug_mode then
+                        if delete_ok then
+                            print('[JobBinds] Deleted macro file: ' .. macro_file_path)
+                        else
+                            print('[JobBinds] Failed to delete macro file: ' .. macro_file_path)
+                        end
+                    end
+                end
+                
+                -- Remove the binding from the list
+                table.remove(current_bindings, config_ui.selected_binding)
+                
+                if config_ui.debug_mode then
+                    print('[JobBinds] Deleted binding: ' .. binding.key .. 
+                          (binding.modifiers ~= '' and (' (' .. binding.modifiers .. ')') or '') .. 
+                          ' -> ' .. binding.command)
+                end
+                
+                -- Clear the editor fields
+                config_ui.selected_binding = -1
+                config_ui.binding_key[1] = ''
+                config_ui.shift_modifier[1] = false
+                config_ui.alt_modifier[1] = false
+                config_ui.ctrl_modifier[1] = false
+                config_ui.command_text[1] = ''
+                config_ui.is_macro[1] = false
+                config_ui.macro_text[1] = ''
+                config_ui.is_binding = false
+                
+                -- Save the updated profile
+                if save_bindings_to_profile() then
+                    print('[JobBinds] Binding deleted and profile saved successfully')
+                else
+                    print('[JobBinds] Failed to save profile after deletion')
+                end
+            else
+                print('[JobBinds] No binding selected for deletion')
             end
         end
         
@@ -496,6 +602,11 @@ function config_ui.render()
                 local scripts_path = string.format('%s/scripts', AshitaCore:GetInstallPath())
                 local macro_file_path = string.format('%s/%s.txt', scripts_path, macro_name)
                 
+                if config_ui.debug_mode then
+                    print('[JobBinds] Scripts path: ' .. scripts_path)
+                    print('[JobBinds] Macro file path: ' .. macro_file_path)
+                end
+                
                 -- Create scripts directory if it doesn't exist
                 local dir_ok = pcall(function()
                     os.execute('mkdir "' .. scripts_path .. '" 2>nul')
@@ -538,9 +649,104 @@ function config_ui.render()
                 end
                 
             else
-                config_ui.command_text[1] = '/exec PROFILE_R'
+                -- If no profile, try to generate one based on current job for macro naming
+                local profile_name = 'NEW_PROFILE'
+                local player = AshitaCore:GetMemoryManager():GetPlayer()
+                if player then
+                    local main_job = player:GetMainJob()
+                    local sub_job = player:GetSubJob()
+                    if main_job and main_job > 0 and sub_job and sub_job > 0 then
+                        local job_names = {
+                            [1] = "WAR", [2] = "MNK", [3] = "WHM", [4] = "BLM", [5] = "RDM", [6] = "THF",
+                            [7] = "PLD", [8] = "DRK", [9] = "BST", [10] = "BRD", [11] = "RNG", [12] = "SAM",
+                            [13] = "NIN", [14] = "DRG", [15] = "SMN", [16] = "BLU", [17] = "COR", [18] = "PUP",
+                            [19] = "DNC", [20] = "SCH", [21] = "GEO", [22] = "RUN"
+                        }
+                        local main_job_name = job_names[main_job] or "JOB"
+                        local sub_job_name = job_names[sub_job] or "SUB"
+                        profile_name = main_job_name .. "_" .. sub_job_name
+                    end
+                end
+                
+                -- Generate binding suffix from key and modifiers for macro naming
+                local binding_suffix = ''
+                if config_ui.binding_key[1] ~= '' then
+                    local key_part = config_ui.binding_key[1]
+                    
+                    -- Add modifier prefixes
+                    if config_ui.shift_modifier[1] then
+                        binding_suffix = 'S' .. binding_suffix
+                    end
+                    if config_ui.alt_modifier[1] then
+                        binding_suffix = 'A' .. binding_suffix
+                    end
+                    if config_ui.ctrl_modifier[1] then
+                        binding_suffix = 'C' .. binding_suffix
+                    end
+                    
+                    -- Add key name
+                    binding_suffix = binding_suffix .. key_part
+                else
+                    binding_suffix = 'R' -- Default suffix if no key selected
+                end
+                
+                -- Generate the exec command and macro filename
+                local macro_name = string.format('%s_%s', profile_name, binding_suffix)
+                local exec_command = '/exec ' .. macro_name
+                config_ui.command_text[1] = exec_command
+                
+                -- Create the macro file in scripts folder
+                local scripts_path = string.format('%s/scripts', AshitaCore:GetInstallPath())
+                local macro_file_path = string.format('%s/%s.txt', scripts_path, macro_name)
+                
                 if config_ui.debug_mode then
-                    print('[JobBinds] No profile loaded, using default macro command')
+                    print('[JobBinds] [No Profile] Scripts path: ' .. scripts_path)
+                    print('[JobBinds] [No Profile] Macro file path: ' .. macro_file_path)
+                end
+                
+                -- Create scripts directory if it doesn't exist
+                local dir_ok = pcall(function()
+                    os.execute('mkdir "' .. scripts_path .. '" 2>nul')
+                end)
+                
+                -- Write macro content to file
+                local macro_file = io.open(macro_file_path, 'w')
+                if macro_file then
+                    local content = config_ui.macro_text[1]
+                    
+                    -- If there was an existing command (not an /exec command), add it as first line
+                    if existing_command ~= '' and not existing_command:match('^/exec%s+') then
+                        if content == '' then
+                            content = existing_command
+                        else
+                            content = existing_command .. '\n' .. content
+                        end
+                        -- Also update the macro text field to show the existing command
+                        if config_ui.macro_text[1] == '' then
+                            config_ui.macro_text[1] = existing_command
+                        else
+                            config_ui.macro_text[1] = existing_command .. '\n' .. config_ui.macro_text[1]
+                        end
+                        if config_ui.debug_mode then
+                            print('[JobBinds] Added existing command to macro: ' .. existing_command)
+                        end
+                    end
+                    
+                    macro_file:write(content)
+                    macro_file:close()
+                    
+                    if config_ui.debug_mode then
+                        print('[JobBinds] Created macro file: ' .. macro_file_path)
+                        print('[JobBinds] Generated macro command: ' .. exec_command)
+                    end
+                else
+                    if config_ui.debug_mode then
+                        print('[JobBinds] Failed to create macro file: ' .. macro_file_path)
+                    end
+                end
+                
+                if config_ui.debug_mode then
+                    print('[JobBinds] No profile loaded, created macro with job-based naming')
                 end
             end
         end
