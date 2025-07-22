@@ -2,19 +2,13 @@
 * JobBinds
 * Automatically loads keybind profile scripts based on current job and subjob.
 * Copyright (c) 2025 Seekey
-* https://github.com/seekey13/jobbinds
-*
-* Version: 0.1
-* Author: Seekey
-* Desc  : Binds management per job/subjob. Unbinds previous profile, loads new profile after delay on job change.
-*         Key blacklist enforced. Profiles are .txt scripts in Ashita/scripts. No fallback/default profile.
-*
+
 * This addon is designed for Ashita v4.
 --]]
 
 addon.name      = 'JobBinds';
 addon.author    = 'Seekey';
-addon.version   = '0.1';
+addon.version   = '0.2';
 addon.desc      = 'Automatically loads keybind profile scripts based on current job/subjob.';
 addon.link      = 'https://github.com/seekey13/jobbinds';
 
