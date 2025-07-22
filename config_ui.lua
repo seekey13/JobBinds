@@ -292,15 +292,27 @@ function config_ui.render()
         imgui.SameLine();
         
         if imgui.Button('Save', { 80, 0 }) then
-            -- Save current binding changes
-            if config_ui.selected_binding > 0 and config_ui.selected_binding <= #current_bindings then
-                -- Get the old binding for unbinding
-                local old_binding = current_bindings[config_ui.selected_binding]
-                local old_bind_command = generate_bind_command(old_binding)
-                local old_key_part = old_bind_command:match('/bind%s+([!@#%^+%w]+)')
+            -- Check if we have valid data to save
+            if config_ui.binding_key[1] ~= '' and config_ui.command_text[1] ~= '' then
+                local old_key_part = nil
+                local binding = nil
                 
-                -- Update the selected binding with current editor values
-                local binding = current_bindings[config_ui.selected_binding]
+                if config_ui.selected_binding > 0 and config_ui.selected_binding <= #current_bindings then
+                    -- Updating existing binding
+                    binding = current_bindings[config_ui.selected_binding]
+                    local old_bind_command = generate_bind_command(binding)
+                    old_key_part = old_bind_command:match('/bind%s+([!@#%^+%w]+)')
+                else
+                    -- Creating new binding
+                    binding = {}
+                    table.insert(current_bindings, binding)
+                    config_ui.selected_binding = #current_bindings
+                    if config_ui.debug_mode then
+                        print('[JobBinds] Creating new binding')
+                    end
+                end
+                
+                -- Update binding with current editor values
                 binding.key = config_ui.binding_key[1]:upper()
                 
                 -- Build modifiers string
@@ -318,8 +330,8 @@ function config_ui.render()
                 local new_bind_command = generate_bind_command(binding)
                 local new_key_part = new_bind_command:match('/bind%s+([!@#%^+%w]+)')
                 
-                -- Apply changes in-game: unbind old key, bind new key
-                if old_key_part then
+                -- Apply changes in-game: unbind old key (if updating), bind new key
+                if old_key_part and old_key_part ~= new_key_part then
                     local unbind_command = '/unbind ' .. old_key_part
                     local ok = pcall(function()
                         AshitaCore:GetChatManager():QueueCommand(-1, unbind_command)
@@ -339,17 +351,19 @@ function config_ui.render()
                 end
                 
                 if config_ui.debug_mode then
-                    print('[JobBinds] Updated binding: ' .. binding.key .. 
+                    print('[JobBinds] ' .. (old_key_part and 'Updated' or 'Created') .. ' binding: ' .. binding.key .. 
                           (binding.modifiers ~= '' and (' (' .. binding.modifiers .. ')') or '') .. 
                           ' -> ' .. binding.command)
                 end
-            end
-            
-            -- Save all bindings to file
-            if save_bindings_to_profile() then
-                print('[JobBinds] Profile saved successfully')
+                
+                -- Save all bindings to file
+                if save_bindings_to_profile() then
+                    print('[JobBinds] Profile saved successfully')
+                else
+                    print('[JobBinds] Failed to save profile')
+                end
             else
-                print('[JobBinds] Failed to save profile')
+                print('[JobBinds] Cannot save: missing key or command')
             end
         end
         
