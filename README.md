@@ -1,6 +1,6 @@
 # JobBinds
 
-<img width="828" height="462" alt="image" src="https://github.com/user-attachments/assets/720ee5c8-6ad9-4d89-a164-23a525a846a4" />
+<img width="500" alt="image" src="https://github.com/user-attachments/assets/720ee5c8-6ad9-4d89-a164-23a525a846a4" />
 
 JobBinds is an Ashita v4 addon for Final Fantasy XI that automatically loads keybind profile scripts based on your current job and subjob, featuring a built-in graphical configuration interface for managing your keybinds.
 
@@ -23,14 +23,20 @@ JobBinds is an Ashita v4 addon for Final Fantasy XI that automatically loads key
   View all current bindings in an organized list with instant editing capabilities.
 - **Unbinds Previous Profile:**  
   Ensures all keys set by the previous profile are safely unbound before loading the new one.
-- **Blacklist Support:**  
-  Protects essential movement and interface keys from being rebound or unbound (`W`, `A`, `S`, `D`, `F`, `V`).
+- **Comprehensive Key Blocking System:**  
+  Protects essential movement, interface, and system keys from being rebound or unbound with organized categories and real-time validation.
+- **Enhanced Messaging System:**  
+  Color-coded chat output with proper categorization (normal, warning, error, debug) using Ashita's chat module.
+- **Real-time Key Validation:**  
+  UI provides instant feedback for blocked key combinations with detailed explanations of why keys are restricted.
 - **Instant Profile Loading:**  
   Loads new keybind profiles immediately upon job change detection (no delay).
 - **Debug Mode:**  
   Toggle detailed logging for troubleshooting with `/jobbinds debug`.
 - **Robust Error Handling:**  
   Uses Ashita v4 best practices for safe API calls; errors are logged to chat for troubleshooting.
+- **Modular Architecture:**  
+  Clean, organized codebase with separate modules for UI, key blocking, and core functionality.
 - **Minimal Setup:**  
   No configuration required—just add your profiles and let the addon handle everything.
 
@@ -78,10 +84,12 @@ Access the graphical configuration interface with `/jobbinds`:
 
 - **View Current Bindings:** See all keybinds for the current profile in an organized list
 - **Edit Bindings:** Click on any binding to edit its key combination, modifiers, and command
-- **Create New Bindings:** Add new keybinds with an intuitive interface
+- **Create New Bindings:** Add new keybinds with an intuitive interface and real-time validation
+- **Key Validation:** Instant feedback for blocked key combinations with detailed explanations
 - **Macro Support:** Toggle macro mode to create multi-line command sequences
 - **Real-time Updates:** Changes are applied immediately and saved to profile files
 - **Delete Bindings:** Remove unwanted keybinds with a single click
+- **Error Display:** Clear visual indicators for binding conflicts and restrictions
 
 ### Keybind Profiles
 
@@ -103,10 +111,25 @@ Access the graphical configuration interface with `/jobbinds`:
   - `@` = Shift
   - `#` = Win
 
-### Blacklisted Keys
+### Blocked Keys System
 
-The following keys are **never** rebound or unbound by JobBinds for safety:
-- `W` `A` `S` `D` `F` `V`
+JobBinds uses a comprehensive key blocking system to protect essential game functions. Keys are organized into two categories:
+
+**Completely Blocked Keys** (never bindable):
+- **Movement:** `W`, `A`, `S`, `D` (directional movement)
+- **Essential Actions:** `F` (target), `V` (first person), `R` (reply), `Y` (say), `H` (help)
+- **Interface:** `I` (inventory), `J` (job abilities), `K` (magic), `L` (search), `N` (cancel)
+- **Navigation:** Arrow keys, `TAB`, `ENTER`, `SPACE`, `ESCAPE`
+- **Function Keys:** `F1` through `F12`
+- **Modifier Keys:** `CTRL`, `SHIFT`, `ALT`, `WIN` variants
+- **System Keys:** `PRINTSCREEN`, `INSERT`, `DELETE`, `HOME`, `END`, `PAGEUP`, `PAGEDOWN`
+- **Punctuation:** `,` `.` `/` `-` (essential for chat and commands)
+
+**Modifier-Restricted Keys** (can be used alone or with Shift, but not with Ctrl/Alt):
+- **Common Actions:** `B`, `E`, `M`, `Q`, `T`, `U`, `X`
+- **Number Keys:** `0` through `9`
+
+The system provides real-time validation with explanations when attempting to bind blocked keys in the configuration interface.
 
 ### Debug Mode
 
@@ -121,26 +144,38 @@ Enable debug mode with `/jobbinds debug` to see detailed information including:
 
 ## Output
 
-JobBinds provides informative chat output for profile operations and errors:
+JobBinds provides color-coded chat output using Ashita's chat module for clear categorization:
 
 **Example Output:**
 ```
-[JobBinds] JobBinds v0.3 by Seekey loaded. Profiles will auto-load on job/subjob change.
+[JobBinds] JobBinds v0.4 by Seekey loaded. Profiles will auto-load on job/subjob change.
 [JobBinds] Job change detected: WAR/NIN -> BLM/RDM
 [JobBinds] Previous job/subjob binds unloaded.
 [JobBinds] Loaded jobbinds profile: BLM_RDM.txt
 [JobBinds] Opening JobBinds configuration window.
 [JobBinds] Debug mode enabled.
+```
+
+**Error Messages (red):**
+```
 [JobBinds] ERROR: Profile BLM_RDM.txt not found.
+[JobBinds] ERROR: Failed to get job/subjob from party object.
+[JobBinds] ERROR: Failed to unbind key: F1
+```
+
+**Warning Messages (yellow):**
+```
+[JobBinds] WARNING: Key combination blocked for safety reasons.
 ```
 
 **Debug Output (when enabled):**
 ```
-[JobBinds] DEBUG: Received packet 0x1B, scheduling job change check
-[JobBinds] DEBUG: Current jobs detected: Main=1, Sub=13
-[JobBinds] DEBUG: Attempting to load profile: /path/to/scripts/WAR_NIN.txt
-[JobBinds] DEBUG: Found bindable key: F1
-[JobBinds] DEBUG: Total keys found: 5
+[JobBinds] [DEBUG] Received packet 0x1B, scheduling job change check
+[JobBinds] [DEBUG] Current jobs detected: Main=1, Sub=13
+[JobBinds] [DEBUG] Attempting to load profile: /path/to/scripts/WAR_NIN.txt
+[JobBinds] [DEBUG] Found bindable key: ^F1
+[JobBinds] [DEBUG] Total keys found: 5
+[JobBinds] [DEBUG] Skipped blacklisted key: W
 ```
 
 ---
@@ -167,7 +202,7 @@ MIT License. See [LICENSE](LICENSE) for details.
 ## Credits
 
 - Author: Seekey
-- Inspired by the need for fast and safe job-based keybind management.
+- Inspired by the need for job-based keybind management.
 
 ---
 
@@ -179,7 +214,15 @@ Open an issue or pull request on the [GitHub repository](https://github.com/seek
 
 ## Changelog
 
-### Version 0.3 (Current)
+### Version 0.4 (Current)
+- **Enhanced Messaging System:** Integrated color-coded chat output using Ashita's chat module
+- **Comprehensive Key Blocking:** Implemented organized blocked_keybinds module with two key categories
+- **Real-time Key Validation:** Added UI feedback for blocked key combinations with detailed explanations
+- **Code Consolidation:** Eliminated duplication and improved maintainability with helper functions
+- **Improved Error Handling:** Enhanced error categorization with proper warning vs error distinction
+- **Debug Enhancements:** Better debug output formatting and information display
+
+### Version 0.3
 - Added graphical configuration interface with ImGui
 - Real-time keybind editing and management
 - Macro creation and editing support
