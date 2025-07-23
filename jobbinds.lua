@@ -126,6 +126,17 @@ local function unload_profile(keys)
     printf('Previous job/subjob binds unloaded.')
 end
 
+-- Helper: Get safe job name for display (handles nil values)
+local function get_safe_job_name(jobid)
+    return jobid and get_job_shortname(jobid) or 'nil'
+end
+
+-- Helper: Update config UI with profile information
+local function update_config_ui(profile_filename, profile_path)
+    config_ui.set_current_profile(profile_filename)
+    config_ui.load_profile(profile_path)
+end
+
 -- Load new profile via /exec
 local function load_profile(jobid, subjobid)
     local profile_path = get_profile_path(jobid, subjobid)
@@ -148,14 +159,22 @@ local function load_profile(jobid, subjobid)
     if ok then
         printf('Loaded jobbinds profile: %s', profile_filename)
         -- Update the config UI with the current profile
-        config_ui.set_current_profile(profile_filename)
-        config_ui.load_profile(profile_path)  -- Load bindings into UI
+        update_config_ui(profile_filename, profile_path)
         debugf('Successfully loaded and updated UI with profile: %s', profile_filename)
         return true
     else
         errorf('Failed to load profile: %s', profile_filename)
         return false
     end
+end
+
+-- Helper: Load profile and track keys for future unload
+local function load_and_track_profile(jobid, subjobid)
+    local loaded = load_profile(jobid, subjobid)
+    if loaded then
+        last_profile_keys = read_profile_keys(get_profile_path(jobid, subjobid))
+    end
+    return loaded
 end
 
 -- Handle job change logic
@@ -167,27 +186,22 @@ local function handle_job_change()
     end
     
     printf('Job change detected: %s/%s -> %s/%s', 
-           last_job and get_job_shortname(last_job) or 'nil',
-           last_subjob and get_job_shortname(last_subjob) or 'nil',
-           get_job_shortname(jobid), 
-           get_job_shortname(subjobid))
+           get_safe_job_name(last_job),
+           get_safe_job_name(last_subjob),
+           get_safe_job_name(jobid), 
+           get_safe_job_name(subjobid))
     
     -- Unload previous profile
     unload_profile(last_profile_keys)
     -- Clear the config UI profile name and bindings
-    config_ui.set_current_profile(nil)
-    config_ui.load_profile(nil)  -- Clear UI bindings
+    update_config_ui(nil, nil)
     
     -- Update job tracking
     last_job, last_subjob = jobid, subjobid
     last_profile_keys = nil
 
     -- Load new profile immediately
-    local loaded = load_profile(jobid, subjobid)
-    if loaded then
-        -- Track keys for future unload
-        last_profile_keys = read_profile_keys(get_profile_path(jobid, subjobid))
-    end
+    load_and_track_profile(jobid, subjobid)
 end
 
 -- Initial load event
@@ -196,10 +210,7 @@ ashita.events.register('load', 'jobbinds_load', function()
     local jobid, subjobid = get_current_jobs()
     last_job, last_subjob = jobid, subjobid
     if jobid and subjobid then
-        local loaded = load_profile(jobid, subjobid)
-        if loaded then
-            last_profile_keys = read_profile_keys(get_profile_path(jobid, subjobid))
-        end
+        load_and_track_profile(jobid, subjobid)
     end
 end)
 
@@ -238,8 +249,8 @@ ashita.events.register('command', 'jobbinds_command', function(e)
         if debug_mode then
             debugf('Debug information will now be displayed.')
             debugf('Current state: last_job=%s, last_subjob=%s', 
-                   last_job and get_job_shortname(last_job) or 'nil',
-                   last_subjob and get_job_shortname(last_subjob) or 'nil')
+                   get_safe_job_name(last_job),
+                   get_safe_job_name(last_subjob))
             debugf('Profile keys tracked: %d', last_profile_keys and #last_profile_keys or 0)
         end
     else
