@@ -1,5 +1,7 @@
 # JobBinds
 
+<img width="828" height="462" alt="image" src="https://github.com/user-attachments/assets/720ee5c8-6ad9-4d89-a164-23a525a846a4" />
+
 JobBinds is an Ashita v4 addon for Final Fantasy XI that automatically loads keybind profile scripts based on your current job and subjob.
 
 > **Note:**  
