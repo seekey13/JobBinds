@@ -73,13 +73,14 @@ Access the configuration interface with `/jobbinds`:
   ```
   /bind ^F1 /wave
   /bind ^1 /attack
-  /bind @F2 /exec macro_heal
+  /bind +F2 /exec macro_heal
   ```
 - **Modifier Keys:**  
   - `^` = Ctrl
   - `!` = Alt  
-  - `@` = Shift
-  - `#` = Win
+  - `+` = Shift
+  - `@` = Win
+  - `#` = Apps
 
 ### Blocked Keys
 
