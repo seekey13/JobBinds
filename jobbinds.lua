@@ -13,18 +13,20 @@ addon.desc      = 'Automatically loads keybind profile scripts based on current 
 addon.link      = 'https://github.com/seekey13/jobbinds';
 
 require('common');
+local chat = require('chat')
 local config_ui = require('config_ui');
 local blocked_keybinds = require('blocked_keybinds');
 
 -- Use the blocked_keybinds module for consistency
 local KEY_BLACKLIST = blocked_keybinds.blocked;
 
--- Helper functions for printing
-local function printf(fmt, ...)  print(string.format('[JobBinds] ' .. fmt, ...)) end
-local function errorf(fmt, ...) print(string.format('[JobBinds] ERROR: ' .. fmt, ...)) end
+-- Custom print functions for categorized output.
+local function printf(fmt, ...)  print(chat.header(addon.name) .. chat.message(fmt:format(...))) end
+local function warnf(fmt, ...)   print(chat.header(addon.name) .. chat.warning(fmt:format(...))) end
+local function errorf(fmt, ...)  print(chat.header(addon.name) .. chat.error  (fmt:format(...))) end
 local function debugf(fmt, ...) 
     if debug_mode then
-        print(string.format('[JobBinds] DEBUG: ' .. fmt, ...)) 
+        print(chat.header(addon.name) .. chat.message('[DEBUG] ' .. fmt:format(...))) 
     end
 end
 
