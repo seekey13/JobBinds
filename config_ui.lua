@@ -61,8 +61,10 @@ local function generate_bind_command(binding)
             elseif modifier == 'Alt' then
                 key_part = '!' .. key_part
             elseif modifier == 'Shift' then
-                key_part = '@' .. key_part
+                key_part = '+' .. key_part
             elseif modifier == 'Win' then
+                key_part = '@' .. key_part
+            elseif modifier == 'Apps' then
                 key_part = '#' .. key_part
             end
         end
@@ -268,12 +270,16 @@ local function parse_bind_line(line)
         table.insert(modifiers, 'Alt')
         key = key:sub(2)
     end
-    if key:match('^@') then
+    if key:match('^%+') then
         table.insert(modifiers, 'Shift')
         key = key:sub(2)
     end
-    if key:match('^#') then
+    if key:match('^@') then
         table.insert(modifiers, 'Win')
+        key = key:sub(2)
+    end
+    if key:match('^#') then
+        table.insert(modifiers, 'Apps')
         key = key:sub(2)
     end
     
@@ -293,6 +299,10 @@ local function parse_bind_line(line)
                 table.insert(modifiers, 'Alt')
             elseif mod == 'shift' then
                 table.insert(modifiers, 'Shift')
+            elseif mod == 'win' then
+                table.insert(modifiers, 'Win')
+            elseif mod == 'apps' then
+                table.insert(modifiers, 'Apps')
             end
         end
     end
