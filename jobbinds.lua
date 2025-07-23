@@ -8,22 +8,16 @@
 
 addon.name      = 'JobBinds';
 addon.author    = 'Seekey';
-addon.version   = '0.3';
+addon.version   = '0.4';
 addon.desc      = 'Automatically loads keybind profile scripts based on current job/subjob.';
 addon.link      = 'https://github.com/seekey13/jobbinds';
 
 require('common');
 local config_ui = require('config_ui');
+local blocked_keybinds = require('blocked_keybinds');
 
--- Blacklist keys (cannot be bound/unbound by this addon)
-local KEY_BLACKLIST = {
-    ['W'] = true,
-    ['A'] = true,
-    ['S'] = true,
-    ['D'] = true,
-    ['F'] = true,
-    ['V'] = true,
-}
+-- Use the blocked_keybinds module for consistency
+local KEY_BLACKLIST = blocked_keybinds.blocked;
 
 -- Helper functions for printing
 local function printf(fmt, ...)  print(string.format('[JobBinds] ' .. fmt, ...)) end

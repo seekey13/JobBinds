@@ -1,6 +1,7 @@
 require('common');
 local imgui = require('imgui');
 local vk_codes = require('vk_codes');
+local blocked_keybinds = require('blocked_keybinds');
 
 -- UI state variables
 local config_ui = {};
@@ -16,10 +17,36 @@ config_ui.macro_text = { '' };
 config_ui.current_profile = 'No Profile Loaded';
 config_ui.is_binding = false; -- Track if we're currently capturing a key
 config_ui.debug_mode = false; -- Debug mode flag, controlled by main addon
+config_ui.error_message = ''; -- Error message for blocked keys
 
 -- Current bindings loaded from profile file
 local current_bindings = {};
 local current_profile_path = nil; -- Track the current profile file path
+
+-- Function to validate key binding and set error message
+local function validate_key_binding()
+    config_ui.error_message = '' -- Clear previous errors
+    
+    if config_ui.binding_key[1] == '' then
+        return true -- No key selected yet, no error
+    end
+    
+    -- Build modifiers string for validation
+    local modifiers = {}
+    if config_ui.shift_modifier[1] then table.insert(modifiers, 'Shift') end
+    if config_ui.alt_modifier[1] then table.insert(modifiers, 'Alt') end
+    if config_ui.ctrl_modifier[1] then table.insert(modifiers, 'Ctrl') end
+    local modifier_string = table.concat(modifiers, '+')
+    
+    -- Check if the key combination is blocked
+    local is_blocked, error_msg = blocked_keybinds.is_combination_blocked(config_ui.binding_key[1], modifier_string)
+    if is_blocked then
+        config_ui.error_message = error_msg or blocked_keybinds.get_block_reason(config_ui.binding_key[1], modifier_string)
+        return false
+    end
+    
+    return true
+end
 
 -- Function to generate bind command string from binding data
 local function generate_bind_command(binding)
@@ -367,6 +394,7 @@ function config_ui.render()
                 
                 if imgui.Selectable(label, config_ui.selected_binding == i) then
                     config_ui.selected_binding = i;
+                    config_ui.error_message = ''; -- Clear any error messages
                     -- Populate the edit fields with selected binding data
                     config_ui.binding_key[1] = string.upper(binding.key);
                     config_ui.shift_modifier[1] = string.find(binding.modifiers, 'Shift') ~= nil;
@@ -375,6 +403,7 @@ function config_ui.render()
                     config_ui.command_text[1] = binding.command;
                     config_ui.is_macro[1] = binding.is_macro or false;
                     config_ui.macro_text[1] = binding.macro_content or '';
+                    validate_key_binding(); -- Validate the selected binding
                 end
             end
         end
@@ -398,13 +427,19 @@ function config_ui.render()
             config_ui.is_macro[1] = false;
             config_ui.macro_text[1] = '';
             config_ui.is_binding = false;
+            config_ui.error_message = ''; -- Clear any error messages
         end
         
         imgui.SameLine();
         
         if imgui.Button('Save', { 80, 0 }) then
-            -- Check if we have valid data to save
-            if config_ui.binding_key[1] ~= '' and config_ui.command_text[1] ~= '' then
+            -- Validate the key binding before saving
+            if not validate_key_binding() then
+                -- Error message is already set by validate_key_binding()
+                if config_ui.debug_mode then
+                    print('[JobBinds] Save blocked: ' .. config_ui.error_message)
+                end
+            elseif config_ui.binding_key[1] ~= '' and config_ui.command_text[1] ~= '' then
                 -- If no profile is loaded, create a new one
                 if not current_profile_path or config_ui.current_profile == 'No Profile Loaded' then
                     -- Generate a default profile name based on current job (if available) or use a generic name
@@ -508,8 +543,11 @@ function config_ui.render()
                 else
                     print('[JobBinds] Failed to save profile')
                 end
-            else
-                print('[JobBinds] Cannot save: missing key or command')
+            elseif config_ui.binding_key[1] == '' or config_ui.command_text[1] == '' then
+                config_ui.error_message = 'Missing key or command'
+                if config_ui.debug_mode then
+                    print('[JobBinds] Cannot save: missing key or command')
+                end
             end
         end
         
@@ -599,13 +637,27 @@ function config_ui.render()
         imgui.Text('Key: ' .. display_key);
         
         imgui.SameLine();
-        imgui.Checkbox('Shift', config_ui.shift_modifier);
+        if imgui.Checkbox('Shift', config_ui.shift_modifier) then
+            validate_key_binding(); -- Validate when modifier changes
+        end
         
         imgui.SameLine();
-        imgui.Checkbox('Alt', config_ui.alt_modifier);
+        if imgui.Checkbox('Alt', config_ui.alt_modifier) then
+            validate_key_binding(); -- Validate when modifier changes
+        end
         
         imgui.SameLine();
-        imgui.Checkbox('Ctrl', config_ui.ctrl_modifier);
+        if imgui.Checkbox('Ctrl', config_ui.ctrl_modifier) then
+            validate_key_binding(); -- Validate when modifier changes
+        end
+        
+        -- Error message display (only show if there's an error)
+        if config_ui.error_message ~= '' then
+            imgui.Spacing();
+            imgui.PushStyleColor(ImGuiCol_Text, { 1.0, 0.3, 0.3, 1.0 }); -- Red color
+            imgui.Text('Error: ' .. config_ui.error_message);
+            imgui.PopStyleColor();
+        end
         
         imgui.Spacing();
         imgui.Spacing();
@@ -715,6 +767,7 @@ function config_ui.render()
                     if vk_codes.is_known_key(key_code) then
                         config_ui.binding_key[1] = key_name;
                         config_ui.is_binding = false;
+                        validate_key_binding(); -- Validate the new key
                         if config_ui.debug_mode then
                             print('[JobBinds] Detected key: ' .. key_name .. ' (code: ' .. key_code .. ')');
                         end
@@ -722,6 +775,7 @@ function config_ui.render()
                         -- Unknown key, store as raw code for debugging
                         config_ui.binding_key[1] = 'KEY_' .. key_code;
                         config_ui.is_binding = false;
+                        validate_key_binding(); -- Validate the new key
                         if config_ui.debug_mode then
                             print('[JobBinds] Detected unknown key code: ' .. key_code);
                         end
