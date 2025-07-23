@@ -13,32 +13,12 @@ JobBinds is an Ashita v4 addon for Final Fantasy XI that automatically loads key
 
 ## Features
 
-- **Automatic Profile Switching:**  
-  Monitors your current job and subjob, automatically loads the correct keybind profile script when you change jobs.
-- **Graphical Configuration Interface:**  
-  Built-in ImGui interface for viewing, editing, creating, and managing keybinds without manually editing text files.
-- **Macro Support:**  
-  Create and edit multi-line macro files directly from the UI, with automatic file generation and management.
-- **Real-time Binding Management:**  
-  View all current bindings in an organized list with instant editing capabilities.
-- **Unbinds Previous Profile:**  
-  Ensures all keys set by the previous profile are safely unbound before loading the new one.
-- **Comprehensive Key Blocking System:**  
-  Protects essential movement, interface, and system keys from being rebound or unbound with organized categories and real-time validation.
-- **Enhanced Messaging System:**  
-  Color-coded chat output with proper categorization (normal, warning, error, debug) using Ashita's chat module.
-- **Real-time Key Validation:**  
-  UI provides instant feedback for blocked key combinations with detailed explanations of why keys are restricted.
-- **Instant Profile Loading:**  
-  Loads new keybind profiles immediately upon job change detection (no delay).
-- **Debug Mode:**  
-  Toggle detailed logging for troubleshooting with `/jobbinds debug`.
-- **Robust Error Handling:**  
-  Uses Ashita v4 best practices for safe API calls; errors are logged to chat for troubleshooting.
-- **Modular Architecture:**  
-  Clean, organized codebase with separate modules for UI, key blocking, and core functionality.
-- **Minimal Setup:**  
-  No configuration required—just add your profiles and let the addon handle everything.
+- **Automatic Profile Switching:** Loads the correct keybind profile when you change jobs
+- **Graphical Configuration Interface:** Built-in ImGui interface for managing keybinds
+- **Real-time Key Validation:** Prevents binding of essential game keys with instant feedback
+- **Macro Support:** Create and edit multi-line macro files from the UI
+- **Profile Management:** Automatically unbinds previous profile keys before loading new ones
+- **Debug Mode:** Toggle detailed logging with `/jobbinds debug`
 
 ---
 
@@ -50,46 +30,36 @@ JobBinds is an Ashita v4 addon for Final Fantasy XI that automatically loads key
     git clone https://github.com/seekey13/jobbinds.git
     ```
 
-2. Place your keybind profile scripts (`JOB_SUB.txt`) in your `Ashita/scripts` directory.
-3. Start or restart Ashita.
-4. Load the addon in-game:
+2. Start or restart Ashita.
+3. Load the addon in-game:
 
     ```
     /addon load jobbinds
     ```
+4. Open the in-game configuration:
 
+    ```
+    /jobbinds
+    ```
 ---
 
 ## Usage
 
-JobBinds runs automatically in the background. When you change jobs or subjobs, it will:
-
-1. **Detect your job and subjob:**  
-   Monitors relevant game packets (0x1B, 0x44, 0x1A) to track changes in real-time.
-2. **Unbind keys from previous profile:**  
-   Safely unbinds all keys set by the last loaded profile except blacklisted keys.
-3. **Load new profile:**  
-   Executes `/exec JOB_SUB.txt` to load the new profile immediately.
-4. **Update configuration UI:**  
-   Automatically updates the graphical interface with the new profile's bindings.
+JobBinds runs automatically in the background. When you change jobs or subjobs, it will unbind the previous profile's keys and load the new profile.
 
 ### Commands
 
 - `/jobbinds` - Opens the configuration window
-- `/jobbinds debug` - Toggles debug mode for detailed logging
+- `/jobbinds debug` - Toggles debug mode
 
 ### Configuration Interface
 
-Access the graphical configuration interface with `/jobbinds`:
+Access the configuration interface with `/jobbinds`:
 
-- **View Current Bindings:** See all keybinds for the current profile in an organized list
-- **Edit Bindings:** Click on any binding to edit its key combination, modifiers, and command
-- **Create New Bindings:** Add new keybinds with an intuitive interface and real-time validation
-- **Key Validation:** Instant feedback for blocked key combinations with detailed explanations
-- **Macro Support:** Toggle macro mode to create multi-line command sequences
-- **Real-time Updates:** Changes are applied immediately and saved to profile files
-- **Delete Bindings:** Remove unwanted keybinds with a single click
-- **Error Display:** Clear visual indicators for binding conflicts and restrictions
+- View and edit current keybinds
+- Create new bindings with key validation
+- Macro support for multi-line commands
+- Real-time profile updates
 
 ### Keybind Profiles
 
@@ -111,79 +81,39 @@ Access the graphical configuration interface with `/jobbinds`:
   - `@` = Shift
   - `#` = Win
 
-### Blocked Keys System
+### Blocked Keys
 
-JobBinds uses a comprehensive key blocking system to protect essential game functions. Keys are organized into two categories:
+Essential game keys are protected from being bound:
 
-**Completely Blocked Keys** (never bindable):
-- **Movement:** `W`, `A`, `S`, `D` (directional movement)
-- **Essential Actions:** `F` (target), `V` (first person), `R` (reply), `Y` (say), `H` (help)
-- **Interface:** `I` (inventory), `J` (job abilities), `K` (magic), `L` (search), `N` (cancel)
-- **Navigation:** Arrow keys, `TAB`, `ENTER`, `SPACE`, `ESCAPE`
-- **Function Keys:** `F1` through `F12`
-- **Modifier Keys:** `CTRL`, `SHIFT`, `ALT`, `WIN` variants
-- **System Keys:** `PRINTSCREEN`, `INSERT`, `DELETE`, `HOME`, `END`, `PAGEUP`, `PAGEDOWN`
-- **Punctuation:** `,` `.` `/` `-` (essential for chat and commands)
+**Movement & Interface:** `W` `A` `S` `D` `F` `V` `R` `Y` `H` `I` `J` `K` `L` `N`  
+**Navigation:** Arrow keys, `TAB`, `ENTER`, `SPACE`, `ESCAPE`  
+**Function Keys:** `F1` through `F12`  
+**System Keys:** Modifier keys and system shortcuts
 
-**Modifier-Restricted Keys** (can be used alone or with Shift, but not with Ctrl/Alt):
-- **Common Actions:** `B`, `E`, `M`, `Q`, `T`, `U`, `X`
-- **Number Keys:** `0` through `9`
-
-The system provides real-time validation with explanations when attempting to bind blocked keys in the configuration interface.
+Some keys like `B` `E` `M` `Q` `T` `U` `X` and numbers can be used alone or with Shift, but not with Ctrl/Alt.
 
 ### Debug Mode
 
-Enable debug mode with `/jobbinds debug` to see detailed information including:
-- Job change detection
-- Profile loading/unloading steps
-- Key binding/unbinding operations
-- File operations and errors
-- Packet reception notifications
+Enable debug mode with `/jobbinds debug` to see detailed logging of job changes, profile loading, and key operations.
 
 ---
 
 ## Output
 
-JobBinds provides color-coded chat output using Ashita's chat module for clear categorization:
+JobBinds provides color-coded chat messages:
 
-**Example Output:**
 ```
-[JobBinds] JobBinds v0.4 by Seekey loaded. Profiles will auto-load on job/subjob change.
+[JobBinds] Loaded jobbinds profile: WAR_NIN.txt
 [JobBinds] Job change detected: WAR/NIN -> BLM/RDM
-[JobBinds] Previous job/subjob binds unloaded.
-[JobBinds] Loaded jobbinds profile: BLM_RDM.txt
-[JobBinds] Opening JobBinds configuration window.
-[JobBinds] Debug mode enabled.
-```
-
-**Error Messages (red):**
-```
 [JobBinds] ERROR: Profile BLM_RDM.txt not found.
-[JobBinds] ERROR: Failed to get job/subjob from party object.
-[JobBinds] ERROR: Failed to unbind key: F1
-```
-
-**Warning Messages (yellow):**
-```
-[JobBinds] WARNING: Key combination blocked for safety reasons.
-```
-
-**Debug Output (when enabled):**
-```
-[JobBinds] [DEBUG] Received packet 0x1B, scheduling job change check
-[JobBinds] [DEBUG] Current jobs detected: Main=1, Sub=13
-[JobBinds] [DEBUG] Attempting to load profile: /path/to/scripts/WAR_NIN.txt
 [JobBinds] [DEBUG] Found bindable key: ^F1
-[JobBinds] [DEBUG] Total keys found: 5
-[JobBinds] [DEBUG] Skipped blacklisted key: W
 ```
 
 ---
 
 ## Advanced Script Features (Ashita v4)
 
-- Scripts may use argument tokens (`%0%`) and `/include` directives.  
-  See [Ashita v4 documentation](https://www.ashitaxi.com/) for advanced script usage.
+Scripts may use argument tokens (`%0%`) and `/include` directives. See [Ashita v4 documentation](https://www.ashitaxi.com/) for details.
 
 ---
 
@@ -208,29 +138,23 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ## Support
 
-Open an issue or pull request on the [GitHub repository](https://github.com/seekey13/jobbinds) if you have suggestions or encounter problems.
+Open an issue or pull request on the [GitHub repository](https://github.com/seekey13/jobbinds) for suggestions or problems.
 
 ---
 
 ## Changelog
 
 ### Version 0.4 (Current)
-- **Enhanced Messaging System:** Integrated color-coded chat output using Ashita's chat module
-- **Comprehensive Key Blocking:** Implemented organized blocked_keybinds module with two key categories
-- **Real-time Key Validation:** Added UI feedback for blocked key combinations with detailed explanations
-- **Code Consolidation:** Eliminated duplication and improved maintainability with helper functions
-- **Improved Error Handling:** Enhanced error categorization with proper warning vs error distinction
-- **Debug Enhancements:** Better debug output formatting and information display
+- Enhanced messaging system with color-coded chat output
+- Comprehensive key blocking with real-time validation
+- Code consolidation and improved maintainability
+- Better error handling and debug output
 
 ### Version 0.3
 - Added graphical configuration interface with ImGui
-- Real-time keybind editing and management
-- Macro creation and editing support
-- Instant profile loading (removed delay)
-- Debug mode toggle command
-- Enhanced error handling and logging
-- Consolidated code for better maintainability
-- Config UI integration with profile management
+- Real-time keybind editing and macro support
+- Instant profile loading and debug mode
+- Enhanced error handling
 
 ### Version 0.2
 - Improved packet monitoring for job changes
