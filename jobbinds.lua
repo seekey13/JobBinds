@@ -8,7 +8,7 @@
 
 addon.name      = 'JobBinds';
 addon.author    = 'Seekey';
-addon.version   = '0.4';
+addon.version   = '0.5';
 addon.desc      = 'Automatically loads keybind profile scripts based on current job/subjob.';
 addon.link      = 'https://github.com/seekey13/jobbinds';
 
