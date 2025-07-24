@@ -23,6 +23,42 @@ config_ui.error_message = ''; -- Error message for blocked keys
 local current_bindings = {};
 local current_profile_path = nil; -- Track the current profile file path
 
+-- Helper: Generate macro filename based on profile + modifiers + key
+local function get_macro_filename(profile_base, key, shift, alt, ctrl)
+    profile_base = profile_base:gsub('%.txt$', '')
+    local mod = ''
+    if ctrl then mod = mod .. '^' end
+    if alt then mod = mod .. '!' end
+    if shift then mod = mod .. '+' end
+    return string.format('%s_%s%s.txt', profile_base, mod, key)
+end
+
+-- Helper: Rename macro script file if the filename changes
+local function rename_macro_file(old_name, new_name)
+    if old_name == new_name then return end
+    local scripts_path = get_scripts_path()
+    local old_path = string.format('%s/%s', scripts_path, old_name)
+    local new_path = string.format('%s/%s', scripts_path, new_name)
+    local file = io.open(old_path, 'r')
+    if file then
+        file:close()
+        -- Only rename if new doesn't already exist
+        local newfile = io.open(new_path, 'r')
+        if not newfile then
+            local ok, err = pcall(function() os.rename(old_path, new_path) end)
+            if config_ui.debug_mode then
+                if ok then
+                    print('[JobBinds] Renamed macro file: ' .. old_path .. ' -> ' .. new_path)
+                else
+                    print('[JobBinds] Failed to rename macro file: ' .. (err or '?'))
+                end
+            end
+        elseif newfile then
+            newfile:close()
+        end
+    end
+end
+
 -- Function to validate key binding and set error message
 local function validate_key_binding()
     config_ui.error_message = '' -- Clear previous errors
@@ -99,7 +135,7 @@ local function generate_binding_suffix()
 end
 
 -- Function to get scripts folder path
-local function get_scripts_path()
+function get_scripts_path()
     return string.format('%s/scripts', AshitaCore:GetInstallPath())
 end
 
@@ -373,6 +409,25 @@ local function load_bindings_from_profile(profile_path)
     end
 end
 
+-- Instantly updates macro command and filename in UI when modifiers/key change
+local function update_macro_command_and_filename()
+    if not config_ui.is_macro[1] then return end
+    local profile_base = config_ui.current_profile
+    if not profile_base or profile_base == 'No Profile Loaded' then
+        profile_base = generate_profile_name()
+    else
+        profile_base = profile_base:gsub('%.txt$', '')
+    end
+    local macro_name = get_macro_filename(
+        profile_base,
+        config_ui.binding_key[1],
+        config_ui.shift_modifier[1],
+        config_ui.alt_modifier[1],
+        config_ui.ctrl_modifier[1]
+    )
+    config_ui.command_text[1] = '/exec ' .. macro_name:gsub('%.txt$', '')
+end
+
 -- Function to render the config window
 function config_ui.render()
     if not config_ui.is_open[1] then
@@ -393,7 +448,6 @@ function config_ui.render()
         imgui.NextColumn();
         
         -- Left column: Current bindings list
-        -- Create a child window for the bindings list with scrolling
         if imgui.BeginChild('bindings_list', { 0, -1 }, true) then
             for i, binding in ipairs(current_bindings) do
                 local label = string.format('%s%s%s -> %s', 
@@ -413,21 +467,22 @@ function config_ui.render()
                     config_ui.command_text[1] = binding.command;
                     config_ui.is_macro[1] = binding.is_macro or false;
                     config_ui.macro_text[1] = binding.macro_content or '';
-                    validate_key_binding(); -- Validate the selected binding
+                    -- Track previous macro settings for renaming
+                    binding.prev_key = binding.key
+                    binding.prev_modifiers = binding.modifiers
+                    binding.prev_shift = config_ui.shift_modifier[1]
+                    binding.prev_alt = config_ui.alt_modifier[1]
+                    binding.prev_ctrl = config_ui.ctrl_modifier[1]
+                    validate_key_binding();
                 end
             end
         end
         imgui.EndChild();
         
-        -- Move to right column
         imgui.NextColumn();
-        
-        -- Right column: Controls
         imgui.Separator();
         
-        -- Button row: New, Save, and Delete
         if imgui.Button('New', { 80, 0 }) then
-            -- TODO: Add new binding logic
             config_ui.selected_binding = -1;
             config_ui.binding_key[1] = '';
             config_ui.shift_modifier[1] = false;
@@ -437,37 +492,26 @@ function config_ui.render()
             config_ui.is_macro[1] = false;
             config_ui.macro_text[1] = '';
             config_ui.is_binding = false;
-            config_ui.error_message = ''; -- Clear any error messages
+            config_ui.error_message = '';
         end
         
         imgui.SameLine();
         
         if imgui.Button('Save', { 80, 0 }) then
-            -- Validate the key binding before saving
             if not validate_key_binding() then
-                -- Error message is already set by validate_key_binding()
                 if config_ui.debug_mode then
                     print('[JobBinds] Save blocked: ' .. config_ui.error_message)
                 end
             elseif config_ui.binding_key[1] ~= '' and config_ui.command_text[1] ~= '' then
-                -- If no profile is loaded, create a new one
                 if not current_profile_path or config_ui.current_profile == 'No Profile Loaded' then
-                    -- Generate a default profile name based on current job (if available) or use a generic name
                     local profile_name = generate_profile_name()
-                    
-                    -- Create the profile file path in scripts folder
                     local scripts_path = get_scripts_path()
                     current_profile_path = string.format('%s/%s.txt', scripts_path, profile_name)
                     config_ui.current_profile = profile_name .. '.txt'
-                    
-                    -- Ensure the directory exists
                     ensure_directory_exists(scripts_path)
-                    
                     if config_ui.debug_mode then
                         print('[JobBinds] Creating new profile in scripts folder: ' .. current_profile_path)
                     end
-                    
-                    -- Initialize empty bindings list if needed
                     if #current_bindings == 0 then
                         current_bindings = {}
                     end
@@ -477,12 +521,10 @@ function config_ui.render()
                 local binding = nil
                 
                 if config_ui.selected_binding > 0 and config_ui.selected_binding <= #current_bindings then
-                    -- Updating existing binding
                     binding = current_bindings[config_ui.selected_binding]
                     local old_bind_command = generate_bind_command(binding)
                     old_key_part = old_bind_command:match('/bind%s+([!@#%^+%w]+)')
                 else
-                    -- Creating new binding
                     binding = {}
                     table.insert(current_bindings, binding)
                     config_ui.selected_binding = #current_bindings
@@ -491,37 +533,43 @@ function config_ui.render()
                     end
                 end
                 
-                -- Update binding with current editor values
                 binding.key = config_ui.binding_key[1]:upper()
-                
-                -- Build modifiers string
                 local modifiers = {}
                 if config_ui.shift_modifier[1] then table.insert(modifiers, 'Shift') end
                 if config_ui.alt_modifier[1] then table.insert(modifiers, 'Alt') end
                 if config_ui.ctrl_modifier[1] then table.insert(modifiers, 'Ctrl') end
                 binding.modifiers = table.concat(modifiers, '+')
-                
                 binding.command = config_ui.command_text[1]
                 binding.is_macro = config_ui.is_macro[1]
                 binding.macro_content = config_ui.macro_text[1]
                 
-                -- If this is a macro binding, update the macro file
+                -- If this is a macro binding, update the macro file and possibly rename
                 if binding.is_macro and binding.command:match('^/exec%s+(.+)$') then
                     local macro_name = binding.command:match('^/exec%s+(.+)$')
-                    local success, updated_content = create_macro_file(macro_name, config_ui.macro_text[1], nil)
-                    
-                    if success and config_ui.debug_mode then
-                        print('[JobBinds] Updated macro file for: ' .. macro_name)
-                    elseif not success and config_ui.debug_mode then
-                        print('[JobBinds] Failed to update macro file for: ' .. macro_name)
+                    macro_name = macro_name:gsub('%.txt$', '') .. '.txt'
+                    local old_macro_name = nil
+                    if binding.old_macro_name then
+                        old_macro_name = binding.old_macro_name
+                    elseif binding.prev_key and binding.prev_modifiers then
+                        local old_profile_base = config_ui.current_profile:gsub('%.txt$', '')
+                        old_macro_name = get_macro_filename(
+                            old_profile_base,
+                            binding.prev_key,
+                            binding.prev_shift,
+                            binding.prev_alt,
+                            binding.prev_ctrl
+                        )
                     end
+                    if old_macro_name and old_macro_name ~= macro_name then
+                        rename_macro_file(old_macro_name, macro_name)
+                    end
+                    local success, updated_content = create_macro_file(macro_name:gsub('%.txt$', ''), config_ui.macro_text[1], nil)
+                    binding.old_macro_name = macro_name
                 end
                 
-                -- Generate new bind command
                 local new_bind_command = generate_bind_command(binding)
                 local new_key_part = new_bind_command:match('/bind%s+([!@#%^+%w]+)')
                 
-                -- Apply changes in-game: unbind old key (if updating), bind new key
                 if old_key_part and old_key_part ~= new_key_part then
                     local unbind_command = '/unbind ' .. old_key_part
                     local ok = pcall(function()
@@ -547,7 +595,6 @@ function config_ui.render()
                           ' -> ' .. binding.command)
                 end
                 
-                -- Save all bindings to file
                 if save_bindings_to_profile() then
                     print('[JobBinds] Profile saved successfully')
                 else
@@ -566,11 +613,8 @@ function config_ui.render()
         if imgui.Button('Delete', { 80, 0 }) then
             if config_ui.selected_binding > 0 and config_ui.selected_binding <= #current_bindings then
                 local binding = current_bindings[config_ui.selected_binding]
-                
-                -- Generate unbind command to remove in-game binding
                 local bind_command = generate_bind_command(binding)
                 local key_part = bind_command:match('/bind%s+([!@#%^+%w]+)')
-                
                 if key_part then
                     local unbind_command = '/unbind ' .. key_part
                     local ok = pcall(function()
@@ -580,18 +624,13 @@ function config_ui.render()
                         print('[JobBinds] Executed: ' .. unbind_command .. (ok and ' [SUCCESS]' or ' [FAILED]'))
                     end
                 end
-                
-                -- If this is a macro binding, delete the macro script file
                 if binding.is_macro and binding.command:match('^/exec%s+(.+)$') then
                     local macro_name = binding.command:match('^/exec%s+(.+)$')
                     local scripts_path = get_scripts_path()
                     local macro_file_path = string.format('%s/%s.txt', scripts_path, macro_name)
-                    
-                    -- Delete the macro file
                     local delete_ok = pcall(function()
                         os.remove(macro_file_path)
                     end)
-                    
                     if config_ui.debug_mode then
                         if delete_ok then
                             print('[JobBinds] Deleted macro file: ' .. macro_file_path)
@@ -600,17 +639,7 @@ function config_ui.render()
                         end
                     end
                 end
-                
-                -- Remove the binding from the list
                 table.remove(current_bindings, config_ui.selected_binding)
-                
-                if config_ui.debug_mode then
-                    print('[JobBinds] Deleted binding: ' .. binding.key .. 
-                          (binding.modifiers ~= '' and (' (' .. binding.modifiers .. ')') or '') .. 
-                          ' -> ' .. binding.command)
-                end
-                
-                -- Clear the editor fields
                 config_ui.selected_binding = -1
                 config_ui.binding_key[1] = ''
                 config_ui.shift_modifier[1] = false
@@ -620,8 +649,6 @@ function config_ui.render()
                 config_ui.is_macro[1] = false
                 config_ui.macro_text[1] = ''
                 config_ui.is_binding = false
-                
-                -- Save the updated profile
                 if save_bindings_to_profile() then
                     print('[JobBinds] Binding deleted and profile saved successfully')
                 else
@@ -635,36 +662,35 @@ function config_ui.render()
         imgui.Spacing();
         imgui.Spacing();
         
-        -- Binding Key input with modifiers on the same line
         if imgui.Button(config_ui.is_binding and 'Press Key...' or 'Bind', { 60, 0 }) then
             config_ui.is_binding = not config_ui.is_binding;
         end
         
         imgui.SameLine();
-        
-        -- Display the detected key
         local display_key = config_ui.binding_key[1] ~= '' and config_ui.binding_key[1] or '(none)';
         imgui.Text('Key: ' .. display_key);
         
         imgui.SameLine();
         if imgui.Checkbox('Shift', config_ui.shift_modifier) then
-            validate_key_binding(); -- Validate when modifier changes
+            validate_key_binding();
+            update_macro_command_and_filename();
         end
         
         imgui.SameLine();
         if imgui.Checkbox('Alt', config_ui.alt_modifier) then
-            validate_key_binding(); -- Validate when modifier changes
+            validate_key_binding();
+            update_macro_command_and_filename();
         end
         
         imgui.SameLine();
         if imgui.Checkbox('Ctrl', config_ui.ctrl_modifier) then
-            validate_key_binding(); -- Validate when modifier changes
+            validate_key_binding();
+            update_macro_command_and_filename();
         end
         
-        -- Error message display (only show if there's an error)
         if config_ui.error_message ~= '' then
             imgui.Spacing();
-            imgui.PushStyleColor(ImGuiCol_Text, { 1.0, 0.3, 0.3, 1.0 }); -- Red color
+            imgui.PushStyleColor(ImGuiCol_Text, { 1.0, 0.3, 0.3, 1.0 });
             imgui.Text('Error: ' .. config_ui.error_message);
             imgui.PopStyleColor();
         end
@@ -672,11 +698,9 @@ function config_ui.render()
         imgui.Spacing();
         imgui.Spacing();
         
-        -- Command text field with macro checkbox on the same line
         imgui.Text('Command:');
         imgui.SameLine();
         
-        -- Disable the text field if macro mode is enabled
         if config_ui.is_macro[1] then
             imgui.PushStyleVar(ImGuiStyleVar_Alpha, 0.6);
         end
@@ -689,37 +713,20 @@ function config_ui.render()
         end
         
         imgui.SameLine();
-        
-        -- Store previous macro state to detect changes
         local prev_macro_state = config_ui.is_macro[1]
         imgui.Checkbox('Macro', config_ui.is_macro);
-        
-        -- If macro checkbox was just checked, generate exec command and create macro file
         if config_ui.is_macro[1] and not prev_macro_state then
-            -- Capture existing command before we overwrite it
             local existing_command = config_ui.command_text[1]
-            
-            -- Generate exec command based on current profile and binding
             local profile_base = config_ui.current_profile
             if profile_base and profile_base ~= 'No Profile Loaded' then
-                -- Remove .txt extension if present
                 profile_base = profile_base:gsub('%.txt$', '')
-                
-                -- Generate binding suffix from key and modifiers
                 local binding_suffix = generate_binding_suffix()
-                
-                -- Generate the exec command and macro filename
                 local macro_name = string.format('%s_%s', profile_base, binding_suffix)
                 local exec_command = '/exec ' .. macro_name
                 config_ui.command_text[1] = exec_command
-                
-                -- Create the macro file in scripts folder
                 local success, updated_content = create_macro_file(macro_name, config_ui.macro_text[1], existing_command)
-                
                 if success then
-                    -- Update the macro text field to show the final content
                     config_ui.macro_text[1] = updated_content
-                    
                     if config_ui.debug_mode then
                         print('[JobBinds] Generated macro command: ' .. exec_command)
                     end
@@ -728,26 +735,15 @@ function config_ui.render()
                         print('[JobBinds] Failed to create macro file for: ' .. macro_name)
                     end
                 end
-                
             else
-                -- If no profile, try to generate one based on current job for macro naming
                 local profile_name = generate_profile_name()
-                
-                -- Generate binding suffix from key and modifiers for macro naming
                 local binding_suffix = generate_binding_suffix()
-                
-                -- Generate the exec command and macro filename
                 local macro_name = string.format('%s_%s', profile_name, binding_suffix)
                 local exec_command = '/exec ' .. macro_name
                 config_ui.command_text[1] = exec_command
-                
-                -- Create the macro file in scripts folder
                 local success, updated_content = create_macro_file(macro_name, config_ui.macro_text[1], existing_command)
-                
                 if success then
-                    -- Update the macro text field to show the final content
                     config_ui.macro_text[1] = updated_content
-                    
                     if config_ui.debug_mode then
                         print('[JobBinds] Generated macro command: ' .. exec_command)
                         print('[JobBinds] No profile loaded, created macro with job-based naming')
@@ -760,32 +756,29 @@ function config_ui.render()
             end
         end
         
-        -- Show multiline text field if macro is enabled
         if config_ui.is_macro[1] then
             imgui.Spacing();
-            imgui.InputTextMultiline('##macro_text', config_ui.macro_text, 2048, { -1, -1 }); -- -1 width means full column width
+            imgui.InputTextMultiline('##macro_text', config_ui.macro_text, 2048, { -1, -1 });
         end
         
-        -- Key detection logic
         if config_ui.is_binding then
-            -- Test all possible key codes
             for key_code = 1, 255 do
                 local ok, is_pressed = pcall(function() return imgui.IsKeyPressed(key_code) end)
                 if ok and is_pressed then
                     local key_name = vk_codes.get_key_name(key_code);
-                    
                     if vk_codes.is_known_key(key_code) then
                         config_ui.binding_key[1] = key_name;
                         config_ui.is_binding = false;
-                        validate_key_binding(); -- Validate the new key
+                        validate_key_binding();
+                        update_macro_command_and_filename();
                         if config_ui.debug_mode then
                             print('[JobBinds] Detected key: ' .. key_name .. ' (code: ' .. key_code .. ')');
                         end
                     else
-                        -- Unknown key, store as raw code for debugging
                         config_ui.binding_key[1] = 'KEY_' .. key_code;
                         config_ui.is_binding = false;
-                        validate_key_binding(); -- Validate the new key
+                        validate_key_binding();
+                        update_macro_command_and_filename();
                         if config_ui.debug_mode then
                             print('[JobBinds] Detected unknown key code: ' .. key_code);
                         end
@@ -793,8 +786,6 @@ function config_ui.render()
                     break;
                 end
             end
-            
-            -- Cancel binding on Escape
             local ok, is_pressed = pcall(function() return imgui.IsKeyPressed(27) end)
             if ok and is_pressed then
                 config_ui.is_binding = false;
@@ -804,37 +795,31 @@ function config_ui.render()
             end
         end
         
-        imgui.Columns(1); -- Reset columns
+        imgui.Columns(1);
     end
     imgui.End();
 end
 
--- Function to show the config window
 function config_ui.show()
     config_ui.is_open[1] = true;
 end
 
--- Function to hide the config window
 function config_ui.hide()
     config_ui.is_open[1] = false;
 end
 
--- Function to toggle the config window
 function config_ui.toggle()
     config_ui.is_open[1] = not config_ui.is_open[1];
 end
 
--- Function to set the current profile name
 function config_ui.set_current_profile(profile_name)
     config_ui.current_profile = profile_name or 'No Profile Loaded';
 end
 
--- Function to load profile and update bindings
 function config_ui.load_profile(profile_path)
     load_bindings_from_profile(profile_path);
 end
 
--- Function to set debug mode state
 function config_ui.set_debug_mode(enabled)
     config_ui.debug_mode = enabled;
 end
