@@ -410,7 +410,7 @@ local function load_bindings_from_profile(profile_path)
 end
 
 -- Instantly updates macro command and filename in UI when modifiers/key change
-local function update_macro_command_and_filename()
+local function update_macro_command_and_filename(create_file, existing_command)
     if not config_ui.is_macro[1] then return end
     local profile_base = config_ui.current_profile
     if not profile_base or profile_base == 'No Profile Loaded' then
@@ -426,6 +426,21 @@ local function update_macro_command_and_filename()
         config_ui.ctrl_modifier[1]
     )
     config_ui.command_text[1] = '/exec ' .. macro_name:gsub('%.txt$', '')
+    
+    -- If create_file is true, create the macro file
+    if create_file then
+        local success, updated_content = create_macro_file(macro_name:gsub('%.txt$', ''), config_ui.macro_text[1], existing_command)
+        if success then
+            config_ui.macro_text[1] = updated_content
+            if config_ui.debug_mode then
+                print('[JobBinds] Generated macro command: ' .. config_ui.command_text[1])
+            end
+        else
+            if config_ui.debug_mode then
+                print('[JobBinds] Failed to create macro file for: ' .. macro_name)
+            end
+        end
+    end
 end
 
 -- Function to render the config window
@@ -671,7 +686,7 @@ function config_ui.render()
         imgui.Text('Key: ' .. display_key);
         
         imgui.SameLine();
-        if imgui.Checkbox('Shift', config_ui.shift_modifier) then
+        if imgui.Checkbox('Ctrl', config_ui.ctrl_modifier) then
             validate_key_binding();
             update_macro_command_and_filename();
         end
@@ -683,7 +698,7 @@ function config_ui.render()
         end
         
         imgui.SameLine();
-        if imgui.Checkbox('Ctrl', config_ui.ctrl_modifier) then
+        if imgui.Checkbox('Shift', config_ui.shift_modifier) then
             validate_key_binding();
             update_macro_command_and_filename();
         end
@@ -715,45 +730,11 @@ function config_ui.render()
         imgui.SameLine();
         local prev_macro_state = config_ui.is_macro[1]
         imgui.Checkbox('Macro', config_ui.is_macro);
+        
+        -- If macro checkbox was just checked, generate exec command and create macro file
         if config_ui.is_macro[1] and not prev_macro_state then
             local existing_command = config_ui.command_text[1]
-            local profile_base = config_ui.current_profile
-            if profile_base and profile_base ~= 'No Profile Loaded' then
-                profile_base = profile_base:gsub('%.txt$', '')
-                local binding_suffix = generate_binding_suffix()
-                local macro_name = string.format('%s_%s', profile_base, binding_suffix)
-                local exec_command = '/exec ' .. macro_name
-                config_ui.command_text[1] = exec_command
-                local success, updated_content = create_macro_file(macro_name, config_ui.macro_text[1], existing_command)
-                if success then
-                    config_ui.macro_text[1] = updated_content
-                    if config_ui.debug_mode then
-                        print('[JobBinds] Generated macro command: ' .. exec_command)
-                    end
-                else
-                    if config_ui.debug_mode then
-                        print('[JobBinds] Failed to create macro file for: ' .. macro_name)
-                    end
-                end
-            else
-                local profile_name = generate_profile_name()
-                local binding_suffix = generate_binding_suffix()
-                local macro_name = string.format('%s_%s', profile_name, binding_suffix)
-                local exec_command = '/exec ' .. macro_name
-                config_ui.command_text[1] = exec_command
-                local success, updated_content = create_macro_file(macro_name, config_ui.macro_text[1], existing_command)
-                if success then
-                    config_ui.macro_text[1] = updated_content
-                    if config_ui.debug_mode then
-                        print('[JobBinds] Generated macro command: ' .. exec_command)
-                        print('[JobBinds] No profile loaded, created macro with job-based naming')
-                    end
-                else
-                    if config_ui.debug_mode then
-                        print('[JobBinds] Failed to create macro file for: ' .. macro_name)
-                    end
-                end
-            end
+            update_macro_command_and_filename(true, existing_command)
         end
         
         if config_ui.is_macro[1] then

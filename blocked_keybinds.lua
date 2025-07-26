@@ -59,7 +59,6 @@ M.blocked = {
     ['PAGEUP'] = true,
     ['PAGEDOWN'] = true,
     ['INSERT'] = true,
-    ['DELETE'] = true,
     ['HOME'] = true,
     ['END'] = true,
 }
