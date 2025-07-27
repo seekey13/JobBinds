@@ -2,6 +2,7 @@ require('common');
 local imgui = require('imgui');
 local vk_codes = require('vk_codes');
 local blocked_keybinds = require('blocked_keybinds');
+local ui_functions = require('ui_functions');
 
 -- UI state variables
 local config_ui = {};
@@ -25,12 +26,7 @@ local current_profile_path = nil; -- Track the current profile file path
 
 -- Helper: Generate macro filename based on profile + modifiers + key
 local function get_macro_filename(profile_base, key, shift, alt, ctrl)
-    profile_base = profile_base:gsub('%.txt$', '')
-    local mod = ''
-    if ctrl then mod = mod .. '^' end
-    if alt then mod = mod .. '!' end
-    if shift then mod = mod .. '+' end
-    return string.format('%s_%s%s.txt', profile_base, mod, key)
+    return ui_functions.get_macro_filename(profile_base, key, shift, alt, ctrl)
 end
 
 -- Helper: Rename macro script file if the filename changes
@@ -74,10 +70,10 @@ local function validate_key_binding()
     if config_ui.ctrl_modifier[1] then table.insert(modifiers, 'Ctrl') end
     local modifier_string = table.concat(modifiers, '+')
     
-    -- Check if the key combination is blocked
-    local is_blocked, error_msg = blocked_keybinds.is_combination_blocked(config_ui.binding_key[1], modifier_string)
-    if is_blocked then
-        config_ui.error_message = error_msg or blocked_keybinds.get_block_reason(config_ui.binding_key[1], modifier_string)
+    -- Use shared validation function
+    local is_valid, error_msg = ui_functions.validate_key_binding(config_ui.binding_key[1], modifier_string)
+    if not is_valid then
+        config_ui.error_message = error_msg
         return false
     end
     
@@ -86,327 +82,44 @@ end
 
 -- Function to generate bind command string from binding data
 local function generate_bind_command(binding)
-    local key_part = binding.key
-    local modifiers = {}
-    
-    -- Parse modifiers back to FFXI format
-    if binding.modifiers and binding.modifiers ~= '' then
-        for modifier in binding.modifiers:gmatch('[^+]+') do
-            if modifier == 'Ctrl' then
-                key_part = '^' .. key_part
-            elseif modifier == 'Alt' then
-                key_part = '!' .. key_part
-            elseif modifier == 'Shift' then
-                key_part = '+' .. key_part
-            elseif modifier == 'Win' then
-                key_part = '@' .. key_part
-            elseif modifier == 'Apps' then
-                key_part = '#' .. key_part
-            end
-        end
-    end
-    
-    return string.format('/bind %s %s', key_part, binding.command)
+    return ui_functions.generate_bind_command(binding)
 end
 
 -- Function to generate binding suffix from current UI state
 local function generate_binding_suffix()
-    local binding_suffix = ''
-    if config_ui.binding_key[1] ~= '' then
-        local key_part = config_ui.binding_key[1]
-        
-        -- Add modifier prefixes
-        if config_ui.shift_modifier[1] then
-            binding_suffix = 'S' .. binding_suffix
-        end
-        if config_ui.alt_modifier[1] then
-            binding_suffix = 'A' .. binding_suffix
-        end
-        if config_ui.ctrl_modifier[1] then
-            binding_suffix = 'C' .. binding_suffix
-        end
-        
-        -- Add key name
-        binding_suffix = binding_suffix .. key_part
-    else
-        binding_suffix = 'R' -- Default suffix if no key selected
-    end
-    return binding_suffix
+    return ui_functions.generate_binding_suffix(config_ui.shift_modifier[1], config_ui.alt_modifier[1], config_ui.ctrl_modifier[1])
 end
 
 -- Function to get scripts folder path
 function get_scripts_path()
-    return string.format('%s/scripts', AshitaCore:GetInstallPath())
-end
-
--- Function to ensure directory exists
-local function ensure_directory_exists(path)
-    local ok = pcall(function()
-        os.execute('mkdir "' .. path .. '" 2>nul')
-    end)
-    return ok
+    return ui_functions.get_scripts_path()
 end
 
 -- Function to generate profile name based on current jobs
 local function generate_profile_name()
-    local profile_name = 'NEW_PROFILE'
-    
-    -- Try to get current job information from Ashita
-    local player = AshitaCore:GetMemoryManager():GetPlayer()
-    if player then
-        local main_job = player:GetMainJob()
-        local sub_job = player:GetSubJob()
-        if main_job and main_job > 0 and sub_job and sub_job > 0 then
-            -- Convert job IDs to abbreviations (basic mapping)
-            local job_names = {
-                [1] = "WAR", [2] = "MNK", [3] = "WHM", [4] = "BLM", [5] = "RDM", [6] = "THF",
-                [7] = "PLD", [8] = "DRK", [9] = "BST", [10] = "BRD", [11] = "RNG", [12] = "SAM",
-                [13] = "NIN", [14] = "DRG", [15] = "SMN", [16] = "BLU", [17] = "COR", [18] = "PUP",
-                [19] = "DNC", [20] = "SCH", [21] = "GEO", [22] = "RUN"
-            }
-            local main_job_name = job_names[main_job] or "JOB"
-            local sub_job_name = job_names[sub_job] or "SUB"
-            profile_name = main_job_name .. "_" .. sub_job_name
-        end
-    end
-    
-    return profile_name
+    return ui_functions.generate_profile_name()
 end
 
 -- Function to create macro file with content
 local function create_macro_file(macro_name, content, existing_command)
-    local scripts_path = get_scripts_path()
-    local macro_file_path = string.format('%s/%s.txt', scripts_path, macro_name)
-    
-    if config_ui.debug_mode then
-        print('[JobBinds] Scripts path: ' .. scripts_path)
-        print('[JobBinds] Macro file path: ' .. macro_file_path)
-    end
-    
-    -- Create scripts directory if it doesn't exist
-    ensure_directory_exists(scripts_path)
-    
-    -- Write macro content to file
-    local macro_file = io.open(macro_file_path, 'w')
-    if macro_file then
-        local final_content = content
-        
-        -- If there was an existing command (not an /exec command), add it as first line
-        if existing_command and existing_command ~= '' and not existing_command:match('^/exec%s+') then
-            if final_content == '' then
-                final_content = existing_command
-            else
-                final_content = existing_command .. '\n' .. final_content
-            end
-            
-            if config_ui.debug_mode then
-                print('[JobBinds] Added existing command to macro: ' .. existing_command)
-            end
-        end
-        
-        macro_file:write(final_content)
-        macro_file:close()
-        
-        if config_ui.debug_mode then
-            print('[JobBinds] Created macro file: ' .. macro_file_path)
-        end
-        
-        return true, final_content
-    else
-        if config_ui.debug_mode then
-            print('[JobBinds] Failed to create macro file: ' .. macro_file_path)
-        end
-        return false, content
-    end
+    return ui_functions.create_macro_file(macro_name, content, existing_command, config_ui.debug_mode)
 end
 
 -- Function to save bindings back to profile file
 local function save_bindings_to_profile()
-    if not current_profile_path then
-        if config_ui.debug_mode then
-            print('[JobBinds] No profile path available for saving')
-        end
-        return false
-    end
-    
-    local file = io.open(current_profile_path, 'w')
-    if not file then
-        if config_ui.debug_mode then
-            print('[JobBinds] Could not open profile file for writing: ' .. current_profile_path)
-        end
-        return false
-    end
-    
-    -- Write all bindings
-    for _, binding in ipairs(current_bindings) do
-        local bind_command = generate_bind_command(binding)
-        file:write(bind_command .. '\n')
-        if config_ui.debug_mode then
-            print('[JobBinds] Wrote binding: ' .. bind_command)
-        end
-    end
-    
-    file:close()
-    
-    if config_ui.debug_mode then
-        print('[JobBinds] Saved ' .. #current_bindings .. ' bindings to: ' .. current_profile_path)
-    end
-    
-    return true
+    return ui_functions.save_bindings_to_profile(current_bindings, current_profile_path, config_ui.debug_mode)
 end
 
 -- Function to parse a bind command line
 local function parse_bind_line(line)
-    -- Pattern to match: /bind [modifiers+]key "command" or /bind [modifiers+]key command
-    local modifiers_key, command = line:match('^/bind%s+([!@#%^+%w]+)%s+(.+)$')
-    if not modifiers_key or not command then
-        return nil
-    end
-    
-    -- Remove quotes from command if present
-    command = command:match('^"(.*)"$') or command
-    
-    -- Check if this is a macro (exec command)
-    local is_macro = false
-    local macro_content = ''
-    local exec_file = command:match('^/exec%s+(.+)$')
-    if exec_file then
-        is_macro = true
-        -- Load macro file content
-        local macro_path = string.format('%s/%s', get_scripts_path(), exec_file)
-        if not macro_path:match('%.txt$') then
-            macro_path = macro_path .. '.txt'
-        end
-        
-        local macro_file = io.open(macro_path, 'r')
-        if macro_file then
-            macro_content = macro_file:read('*all')
-            macro_file:close()
-            if config_ui.debug_mode then
-                print('[JobBinds] Loaded macro content from: ' .. macro_path)
-            end
-        else
-            if config_ui.debug_mode then
-                print('[JobBinds] Could not load macro file: ' .. macro_path)
-            end
-            macro_content = '-- Macro file not found: ' .. macro_path
-        end
-    end
-    
-    -- Parse modifiers and key
-    local modifiers = {}
-    local key = modifiers_key
-    
-    -- Check for modifier prefixes
-    if key:match('^%^') then
-        table.insert(modifiers, 'Ctrl')
-        key = key:sub(2)
-    end
-    if key:match('^!') then
-        table.insert(modifiers, 'Alt')
-        key = key:sub(2)
-    end
-    if key:match('^%+') then
-        table.insert(modifiers, 'Shift')
-        key = key:sub(2)
-    end
-    if key:match('^@') then
-        table.insert(modifiers, 'Win')
-        key = key:sub(2)
-    end
-    if key:match('^#') then
-        table.insert(modifiers, 'Apps')
-        key = key:sub(2)
-    end
-    
-    -- Check for + notation (Ctrl+F1, Alt+F2, etc.)
-    local parts = {}
-    for part in key:gmatch('[^+]+') do
-        table.insert(parts, part)
-    end
-    
-    if #parts > 1 then
-        key = parts[#parts] -- Last part is the actual key
-        for i = 1, #parts - 1 do
-            local mod = parts[i]:lower()
-            if mod == 'ctrl' then
-                table.insert(modifiers, 'Ctrl')
-            elseif mod == 'alt' then
-                table.insert(modifiers, 'Alt')
-            elseif mod == 'shift' then
-                table.insert(modifiers, 'Shift')
-            elseif mod == 'win' then
-                table.insert(modifiers, 'Win')
-            elseif mod == 'apps' then
-                table.insert(modifiers, 'Apps')
-            end
-        end
-    end
-    
-    return {
-        key = key:upper(),
-        modifiers = table.concat(modifiers, '+'),
-        command = command,
-        is_macro = is_macro,
-        macro_content = macro_content
-    }
+    return ui_functions.parse_bind_line(line, config_ui.debug_mode)
 end
 
 -- Function to load bindings from profile file
 local function load_bindings_from_profile(profile_path)
-    if config_ui.debug_mode then
-        print('[JobBinds] Loading bindings from: ' .. (profile_path or 'nil'))
-    end
-    
-    current_bindings = {} -- Clear existing bindings
-    current_profile_path = profile_path -- Store the profile path for saving
-    
-    if not profile_path then
-        if config_ui.debug_mode then
-            print('[JobBinds] No profile path provided')
-        end
-        return
-    end
-    
-    local file = io.open(profile_path, 'r')
-    if not file then
-        if config_ui.debug_mode then
-            print('[JobBinds] Could not open profile file: ' .. profile_path)
-        end
-        return
-    end
-    
-    local line_count = 0
-    local bind_count = 0
-    
-    for line in file:lines() do
-        line_count = line_count + 1
-        line = line:match('^%s*(.-)%s*$') -- Trim whitespace
-        
-        if line:match('^/bind%s+') then
-            local binding = parse_bind_line(line)
-            if binding then
-                table.insert(current_bindings, binding)
-                bind_count = bind_count + 1
-                if config_ui.debug_mode then
-                    print('[JobBinds] Parsed binding: ' .. binding.key .. 
-                          (binding.modifiers ~= '' and (' (' .. binding.modifiers .. ')') or '') .. 
-                          ' -> ' .. binding.command .. 
-                          (binding.is_macro and ' [MACRO]' or ''))
-                end
-            else
-                if config_ui.debug_mode then
-                    print('[JobBinds] Failed to parse bind line: ' .. line)
-                end
-            end
-        end
-    end
-    
-    file:close()
-    
-    if config_ui.debug_mode then
-        print('[JobBinds] Loaded ' .. bind_count .. ' bindings from ' .. line_count .. ' lines')
-    end
+    local bindings, path = ui_functions.load_bindings_from_profile(profile_path, config_ui.debug_mode)
+    current_bindings = bindings
+    current_profile_path = path
 end
 
 -- Instantly updates macro command and filename in UI when modifiers/key change
@@ -523,7 +236,7 @@ function config_ui.render()
                     local scripts_path = get_scripts_path()
                     current_profile_path = string.format('%s/%s.txt', scripts_path, profile_name)
                     config_ui.current_profile = profile_name .. '.txt'
-                    ensure_directory_exists(scripts_path)
+                    -- Directory creation is handled by ui_functions when needed
                     if config_ui.debug_mode then
                         print('[JobBinds] Creating new profile in scripts folder: ' .. current_profile_path)
                     end

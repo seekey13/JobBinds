@@ -2,6 +2,7 @@ require('common');
 local imgui = require('imgui');
 local vk_codes = require('vk_codes');
 local blocked_keybinds = require('blocked_keybinds');
+local ui_functions = require('ui_functions');
 
 -- UI state variables
 local keyboard_ui = {};
@@ -111,9 +112,59 @@ local function render_key_button(key, width)
     end
     
     if button_clicked then
-        -- Handle key click - for now just visual feedback
+        -- Handle key click - populate UI with existing binding if it exists
         keyboard_ui.binding_key[1] = key:upper();
         keyboard_ui.error_message = '';
+        
+        -- Find existing binding for this key
+        local existing_binding = nil
+        for _, binding in ipairs(current_bindings) do
+            if binding.key:upper() == key:upper() then
+                existing_binding = binding
+                break
+            end
+        end
+        
+        if existing_binding then
+            -- Populate UI with existing binding
+            keyboard_ui.command_text[1] = existing_binding.command or ''
+            keyboard_ui.is_macro[1] = existing_binding.is_macro or false
+            
+            -- Parse modifiers
+            local modifiers = existing_binding.modifiers or ''
+            keyboard_ui.shift_modifier[1] = modifiers:find('Shift') ~= nil
+            keyboard_ui.alt_modifier[1] = modifiers:find('Alt') ~= nil
+            keyboard_ui.ctrl_modifier[1] = modifiers:find('Ctrl') ~= nil
+            
+            -- Load macro content if it's a macro
+            if existing_binding.is_macro and existing_binding.command:match('^/exec%s+(.+)$') then
+                local macro_name = existing_binding.command:match('^/exec%s+(.+)$')
+                local macro_path = string.format('%s/%s', ui_functions.get_scripts_path(), macro_name)
+                if not macro_path:match('%.txt$') then
+                    macro_path = macro_path .. '.txt'
+                end
+                
+                local macro_file = io.open(macro_path, 'r')
+                if macro_file then
+                    keyboard_ui.macro_text[1] = macro_file:read('*all') or ''
+                    macro_file:close()
+                else
+                    keyboard_ui.macro_text[1] = ''
+                end
+                
+                -- Set command to just the macro name for display
+                keyboard_ui.command_text[1] = macro_name:gsub('%.txt$', '')
+            end
+        else
+            -- Clear UI for new binding
+            keyboard_ui.command_text[1] = ''
+            keyboard_ui.macro_text[1] = ''
+            keyboard_ui.is_macro[1] = false
+            keyboard_ui.shift_modifier[1] = false
+            keyboard_ui.alt_modifier[1] = false
+            keyboard_ui.ctrl_modifier[1] = false
+        end
+        
         clicked = true
     end
     
@@ -146,61 +197,50 @@ local function render_virtual_keyboard()
     end
 end
 
--- Helper: Generate macro filename based on profile + modifiers + key
-local function get_macro_filename(profile_base, key, shift, alt, ctrl)
-    profile_base = profile_base:gsub('%.txt$', '')
-    local mod = ''
-    if ctrl then mod = mod .. '^' end
-    if alt then mod = mod .. '!' end
-    if shift then mod = mod .. '+' end
-    return string.format('%s_%s%s.txt', profile_base, mod, key)
-end
-
--- Function to validate key binding and set error message
-local function validate_key_binding()
-    keyboard_ui.error_message = ''
+-- Function to save current binding
+local function save_current_binding()
+    local binding_data = {
+        key = keyboard_ui.binding_key[1],
+        command = keyboard_ui.command_text[1],
+        is_macro = keyboard_ui.is_macro[1],
+        macro_text = keyboard_ui.macro_text[1],
+        shift_modifier = keyboard_ui.shift_modifier[1],
+        alt_modifier = keyboard_ui.alt_modifier[1],
+        ctrl_modifier = keyboard_ui.ctrl_modifier[1]
+    }
     
-    if keyboard_ui.binding_key[1] == '' then
-        return true
-    end
-    
-    local modifiers = {}
-    if keyboard_ui.shift_modifier[1] then table.insert(modifiers, 'Shift') end
-    if keyboard_ui.alt_modifier[1] then table.insert(modifiers, 'Alt') end
-    if keyboard_ui.ctrl_modifier[1] then table.insert(modifiers, 'Ctrl') end
-    local modifier_string = table.concat(modifiers, '+')
-    
-    local is_blocked, error_msg = blocked_keybinds.is_combination_blocked(keyboard_ui.binding_key[1], modifier_string)
-    if is_blocked then
-        keyboard_ui.error_message = error_msg or blocked_keybinds.get_block_reason(keyboard_ui.binding_key[1], modifier_string)
+    local success, error_msg = ui_functions.save_current_binding(binding_data, current_bindings, current_profile_path, keyboard_ui.debug_mode)
+    if not success then
+        keyboard_ui.error_message = error_msg
         return false
     end
     
+    keyboard_ui.error_message = ''
     return true
 end
 
--- Function to generate bind command string from binding data
-local function generate_bind_command(binding)
-    local key_part = binding.key
+-- Function to delete current binding
+local function delete_current_binding()
+    local binding_data = {
+        key = keyboard_ui.binding_key[1],
+        shift_modifier = keyboard_ui.shift_modifier[1],
+        alt_modifier = keyboard_ui.alt_modifier[1],
+        ctrl_modifier = keyboard_ui.ctrl_modifier[1]
+    }
     
-    if binding.modifiers and binding.modifiers ~= '' then
-        for modifier in binding.modifiers:gmatch('[^+]+') do
-            if modifier == 'Ctrl' then
-                key_part = '^' .. key_part
-            elseif modifier == 'Alt' then
-                key_part = '!' .. key_part
-            elseif modifier == 'Shift' then
-                key_part = '+' .. key_part
-            end
-        end
+    local success, error_msg = ui_functions.delete_current_binding(binding_data, current_bindings, current_profile_path, keyboard_ui.debug_mode)
+    if not success then
+        keyboard_ui.error_message = error_msg
+        return false
     end
     
-    local command = binding.command
-    if command:sub(1, 1) ~= '/' then
-        command = '/' .. command
-    end
-    
-    return string.format('/bind %s "%s"', key_part, command)
+    -- Clear UI
+    keyboard_ui.binding_key[1] = ''
+    keyboard_ui.command_text[1] = ''
+    keyboard_ui.macro_text[1] = ''
+    keyboard_ui.is_macro[1] = false
+    keyboard_ui.error_message = ''
+    return true
 end
 
 -- Function to render the binding editor (right side content from config_ui)
@@ -221,30 +261,111 @@ local function render_binding_editor()
     imgui.SameLine();
     
     if imgui.Button('Save', { 86, 0 }) then
-        -- For now, just show a message since this is non-functional
-        print('[JobBinds-KB] Save button clicked (non-functional UI)')
+        if save_current_binding() then
+            print('[JobBinds-KB] Binding saved successfully')
+        else
+            print('[JobBinds-KB] Failed to save binding')
+        end
     end
     
     imgui.SameLine();
     
     if imgui.Button('Delete', { 86, 0 }) then
-        -- For now, just show a message since this is non-functional
-        print('[JobBinds-KB] Delete button clicked (non-functional UI)')
+        if delete_current_binding() then
+            print('[JobBinds-KB] Binding deleted successfully')
+        else
+            print('[JobBinds-KB] Failed to delete binding')
+        end
     end
     
     imgui.SameLine();
     if imgui.Checkbox('Ctrl', keyboard_ui.ctrl_modifier) then
-        validate_key_binding();
+        -- Validate binding
+        keyboard_ui.error_message = ''
+        if keyboard_ui.binding_key[1] ~= '' then
+            local is_valid, error_msg = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], 
+                                                                          keyboard_ui.shift_modifier[1],
+                                                                          keyboard_ui.alt_modifier[1],
+                                                                          keyboard_ui.ctrl_modifier[1])
+            if not is_valid then
+                keyboard_ui.error_message = error_msg
+            end
+        end
+        -- Update macro filename if in macro mode
+        if keyboard_ui.is_macro[1] and keyboard_ui.binding_key[1] ~= '' then
+            local profile_base = keyboard_ui.current_profile or 'profile'
+            if profile_base ~= 'No Profile Loaded' then
+                profile_base = profile_base:gsub('%.txt$', '')
+            else
+                profile_base = 'profile'
+            end
+            local macro_filename = ui_functions.get_macro_filename(profile_base,
+                                                     keyboard_ui.binding_key[1],
+                                                     keyboard_ui.shift_modifier[1],
+                                                     keyboard_ui.alt_modifier[1],
+                                                     keyboard_ui.ctrl_modifier[1])
+            keyboard_ui.command_text[1] = macro_filename:gsub('%.txt$', '')
+        end
     end
     
     imgui.SameLine();
     if imgui.Checkbox('Alt', keyboard_ui.alt_modifier) then
-        validate_key_binding();
+        -- Validate binding
+        keyboard_ui.error_message = ''
+        if keyboard_ui.binding_key[1] ~= '' then
+            local is_valid, error_msg = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], 
+                                                                          keyboard_ui.shift_modifier[1],
+                                                                          keyboard_ui.alt_modifier[1],
+                                                                          keyboard_ui.ctrl_modifier[1])
+            if not is_valid then
+                keyboard_ui.error_message = error_msg
+            end
+        end
+        -- Update macro filename if in macro mode
+        if keyboard_ui.is_macro[1] and keyboard_ui.binding_key[1] ~= '' then
+            local profile_base = keyboard_ui.current_profile or 'profile'
+            if profile_base ~= 'No Profile Loaded' then
+                profile_base = profile_base:gsub('%.txt$', '')
+            else
+                profile_base = 'profile'
+            end
+            local macro_filename = ui_functions.get_macro_filename(profile_base,
+                                                     keyboard_ui.binding_key[1],
+                                                     keyboard_ui.shift_modifier[1],
+                                                     keyboard_ui.alt_modifier[1],
+                                                     keyboard_ui.ctrl_modifier[1])
+            keyboard_ui.command_text[1] = macro_filename:gsub('%.txt$', '')
+        end
     end
     
     imgui.SameLine();
     if imgui.Checkbox('Shift', keyboard_ui.shift_modifier) then
-        validate_key_binding();
+        -- Validate binding
+        keyboard_ui.error_message = ''
+        if keyboard_ui.binding_key[1] ~= '' then
+            local is_valid, error_msg = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], 
+                                                                          keyboard_ui.shift_modifier[1],
+                                                                          keyboard_ui.alt_modifier[1],
+                                                                          keyboard_ui.ctrl_modifier[1])
+            if not is_valid then
+                keyboard_ui.error_message = error_msg
+            end
+        end
+        -- Update macro filename if in macro mode
+        if keyboard_ui.is_macro[1] and keyboard_ui.binding_key[1] ~= '' then
+            local profile_base = keyboard_ui.current_profile or 'profile'
+            if profile_base ~= 'No Profile Loaded' then
+                profile_base = profile_base:gsub('%.txt$', '')
+            else
+                profile_base = 'profile'
+            end
+            local macro_filename = ui_functions.get_macro_filename(profile_base,
+                                                     keyboard_ui.binding_key[1],
+                                                     keyboard_ui.shift_modifier[1],
+                                                     keyboard_ui.alt_modifier[1],
+                                                     keyboard_ui.ctrl_modifier[1])
+            keyboard_ui.command_text[1] = macro_filename:gsub('%.txt$', '')
+        end
     end
     
     if keyboard_ui.error_message ~= '' then
@@ -272,7 +393,37 @@ local function render_binding_editor()
     end
     
     imgui.SameLine();
-    imgui.Checkbox('Macro', keyboard_ui.is_macro);
+    if imgui.Checkbox('Macro', keyboard_ui.is_macro) then
+        if keyboard_ui.is_macro[1] then
+            -- Switching to macro mode
+            if keyboard_ui.binding_key[1] ~= '' then
+                local profile_base = keyboard_ui.current_profile or 'profile'
+                if profile_base ~= 'No Profile Loaded' then
+                    profile_base = profile_base:gsub('%.txt$', '')
+                else
+                    profile_base = 'profile'
+                end
+                local macro_filename = ui_functions.get_macro_filename(profile_base,
+                                                         keyboard_ui.binding_key[1],
+                                                         keyboard_ui.shift_modifier[1],
+                                                         keyboard_ui.alt_modifier[1],
+                                                         keyboard_ui.ctrl_modifier[1])
+                keyboard_ui.command_text[1] = macro_filename:gsub('%.txt$', '')
+                
+                -- Try to load existing macro content
+                local macro_path = string.format('%s/%s', ui_functions.get_scripts_path(), macro_filename)
+                local macro_file = io.open(macro_path, 'r')
+                if macro_file then
+                    keyboard_ui.macro_text[1] = macro_file:read('*all') or ''
+                    macro_file:close()
+                end
+            end
+        else
+            -- Switching to command mode
+            keyboard_ui.macro_text[1] = ''
+            keyboard_ui.command_text[1] = ''
+        end
+    end
     
     if keyboard_ui.is_macro[1] then
         imgui.Spacing();
@@ -288,14 +439,30 @@ local function render_binding_editor()
                 if vk_codes.is_known_key(key_code) then
                     keyboard_ui.binding_key[1] = key_name;
                     keyboard_ui.is_binding = false;
-                    validate_key_binding();
+                    -- Validate binding
+                    keyboard_ui.error_message = ''
+                    local is_valid, error_msg = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], 
+                                                                                  keyboard_ui.shift_modifier[1],
+                                                                                  keyboard_ui.alt_modifier[1],
+                                                                                  keyboard_ui.ctrl_modifier[1])
+                    if not is_valid then
+                        keyboard_ui.error_message = error_msg
+                    end
                     if keyboard_ui.debug_mode then
                         print('[JobBinds-KB] Detected key: ' .. key_name .. ' (code: ' .. key_code .. ')');
                     end
                 else
                     keyboard_ui.binding_key[1] = 'KEY_' .. key_code;
                     keyboard_ui.is_binding = false;
-                    validate_key_binding();
+                    -- Validate binding
+                    keyboard_ui.error_message = ''
+                    local is_valid, error_msg = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], 
+                                                                                  keyboard_ui.shift_modifier[1],
+                                                                                  keyboard_ui.alt_modifier[1],
+                                                                                  keyboard_ui.ctrl_modifier[1])
+                    if not is_valid then
+                        keyboard_ui.error_message = error_msg
+                    end
                     if keyboard_ui.debug_mode then
                         print('[JobBinds-KB] Detected unknown key code: ' .. key_code);
                     end
@@ -349,6 +516,11 @@ end
 
 function keyboard_ui.set_current_profile(profile_name)
     keyboard_ui.current_profile = profile_name or 'No Profile Loaded';
+end
+
+function keyboard_ui.load_profile(profile_path)
+    current_bindings = ui_functions.load_bindings_from_profile(profile_path, keyboard_ui.debug_mode);
+    current_profile_path = profile_path;
 end
 
 function keyboard_ui.load_bindings(bindings)

@@ -132,6 +132,8 @@ end
 local function update_config_ui(profile_filename, profile_path)
     config_ui.set_current_profile(profile_filename)
     config_ui.load_profile(profile_path)
+    keyboard_ui.set_current_profile(profile_filename)
+    keyboard_ui.load_profile(profile_path)
 end
 
 -- Load new profile via /exec
