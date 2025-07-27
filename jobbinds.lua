@@ -8,13 +8,14 @@
 
 addon.name      = 'JobBinds';
 addon.author    = 'Seekey';
-addon.version   = '0.5';
+addon.version   = '0.6';
 addon.desc      = 'Automatically loads keybind profile scripts based on current job/subjob.';
 addon.link      = 'https://github.com/seekey13/jobbinds';
 
 require('common');
 local chat = require('chat')
 local config_ui = require('config_ui');
+local keyboard_ui = require('keyboard_ui');
 local blocked_keybinds = require('blocked_keybinds');
 
 -- Use the blocked_keybinds module for consistency
@@ -241,6 +242,7 @@ ashita.events.register('command', 'jobbinds_command', function(e)
         -- Toggle debug mode
         debug_mode = not debug_mode
         config_ui.set_debug_mode(debug_mode)  -- Update UI debug mode
+        keyboard_ui.set_debug_mode(debug_mode)  -- Update keyboard UI debug mode
         printf('Debug mode %s.', debug_mode and 'enabled' or 'disabled')
         if debug_mode then
             debugf('Debug information will now be displayed.')
@@ -249,17 +251,23 @@ ashita.events.register('command', 'jobbinds_command', function(e)
                    get_safe_job_name(last_subjob))
             debugf('Profile keys tracked: %d', last_profile_keys and #last_profile_keys or 0)
         end
+    elseif #args == 2 and args[2]:lower() == 'kb' then
+        -- Show the keyboard UI
+        keyboard_ui.show()
+        printf('Opening JobBinds keyboard interface.')
     else
         -- Handle unknown commands
-        printf('Usage: /jobbinds [debug]')
+        printf('Usage: /jobbinds [debug|kb]')
         printf('  /jobbinds       - Open configuration window')
         printf('  /jobbinds debug - Toggle debug information')
+        printf('  /jobbinds kb    - Open keyboard interface')
     end
 end)
 
 -- Render loop for ImGui
 ashita.events.register('d3d_present', 'jobbinds_render', function()
     config_ui.render()
+    keyboard_ui.render()
 end)
 
 -- For future: Add a /jobbinds debug command, or more options.
