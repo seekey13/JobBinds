@@ -449,21 +449,29 @@ local function render_binding_editor()
     -- Calculate label width for alignment
     local label_width = 80
     
+    -- Show prompt if no key is selected
+    if keyboard_ui.binding_key[1] == '' then
+        imgui.Spacing();
+        imgui.Spacing();
+        imgui.Text('Click a button on the keyboard to apply a key binding');
+        imgui.Spacing();
+        imgui.Spacing();
+        return
+    end
+    
     -- Check which modifier combinations are valid for the selected key
     local show_none = true -- Always show base key
     local show_ctrl = false
     local show_alt = false
     local show_shift = false
     
-    if keyboard_ui.binding_key[1] ~= '' then
-        local is_valid_ctrl, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, false, true)
-        local is_valid_alt, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, true, false)
-        local is_valid_shift, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], true, false, false)
-        
-        show_ctrl = is_valid_ctrl
-        show_alt = is_valid_alt
-        show_shift = is_valid_shift
-    end
+    local is_valid_ctrl, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, false, true)
+    local is_valid_alt, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, true, false)
+    local is_valid_shift, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], true, false, false)
+    
+    show_ctrl = is_valid_ctrl
+    show_alt = is_valid_alt
+    show_shift = is_valid_shift
     
     -- Render the 4 binding rows with "Macro" header
     imgui.Text('Command:');
@@ -475,7 +483,7 @@ local function render_binding_editor()
     
     -- [KEY]
     if show_none then
-        render_binding_row((keyboard_ui.binding_key[1] ~= '' and keyboard_ui.binding_key[1] or 'KEY'), 
+        render_binding_row(keyboard_ui.binding_key[1], 
                            keyboard_ui.command_text_none, 
                            keyboard_ui.is_macro_none, 
                            keyboard_ui.macro_text_none, 
