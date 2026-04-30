@@ -101,10 +101,10 @@ local function render_key_button(key, width)
         -- No custom styling - uses default ImGui button colors
         push_colors = false
     elseif is_bound then
-        -- Bound keys: green
-        imgui.PushStyleColor(ImGuiCol_Button, { 0.2, 0.8, 0.2, 1.0 });
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.3, 0.9, 0.3, 1.0 });
-        imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.1, 0.7, 0.1, 1.0 });
+        -- Bound keys: green (darker)
+        imgui.PushStyleColor(ImGuiCol_Button, { 0.1, 0.6, 0.1, 1.0 });
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.15, 0.7, 0.15, 1.0 });
+        imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.08, 0.5, 0.08, 1.0 });
         push_colors = true
     else
         -- Normal keys: gray
