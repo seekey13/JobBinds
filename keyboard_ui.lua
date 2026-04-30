@@ -183,12 +183,38 @@ local function render_key_button(key, width)
         -- Load all 4 modifier combinations
         keyboard_ui.command_text_none[1], keyboard_ui.is_macro_none[1], keyboard_ui.macro_text_none[1] = 
             load_modifier_binding(false, false, false)
-        keyboard_ui.command_text_ctrl[1], keyboard_ui.is_macro_ctrl[1], keyboard_ui.macro_text_ctrl[1] = 
-            load_modifier_binding(true, false, false)
-        keyboard_ui.command_text_alt[1], keyboard_ui.is_macro_alt[1], keyboard_ui.macro_text_alt[1] = 
-            load_modifier_binding(false, true, false)
-        keyboard_ui.command_text_shift[1], keyboard_ui.is_macro_shift[1], keyboard_ui.macro_text_shift[1] = 
-            load_modifier_binding(false, false, true)
+        
+        -- Check if modifier combinations are valid for this key before loading
+        local is_valid_ctrl, _ = ui_functions.validate_key_binding(key:upper(), false, false, true)
+        local is_valid_alt, _ = ui_functions.validate_key_binding(key:upper(), false, true, false)
+        local is_valid_shift, _ = ui_functions.validate_key_binding(key:upper(), true, false, false)
+        
+        if is_valid_ctrl then
+            keyboard_ui.command_text_ctrl[1], keyboard_ui.is_macro_ctrl[1], keyboard_ui.macro_text_ctrl[1] = 
+                load_modifier_binding(true, false, false)
+        else
+            keyboard_ui.command_text_ctrl[1] = ''
+            keyboard_ui.is_macro_ctrl[1] = false
+            keyboard_ui.macro_text_ctrl[1] = ''
+        end
+        
+        if is_valid_alt then
+            keyboard_ui.command_text_alt[1], keyboard_ui.is_macro_alt[1], keyboard_ui.macro_text_alt[1] = 
+                load_modifier_binding(false, true, false)
+        else
+            keyboard_ui.command_text_alt[1] = ''
+            keyboard_ui.is_macro_alt[1] = false
+            keyboard_ui.macro_text_alt[1] = ''
+        end
+        
+        if is_valid_shift then
+            keyboard_ui.command_text_shift[1], keyboard_ui.is_macro_shift[1], keyboard_ui.macro_text_shift[1] = 
+                load_modifier_binding(false, false, true)
+        else
+            keyboard_ui.command_text_shift[1] = ''
+            keyboard_ui.is_macro_shift[1] = false
+            keyboard_ui.macro_text_shift[1] = ''
+        end
         
         clicked = true
     end
@@ -257,25 +283,36 @@ local function save_current_binding()
         return true
     end
     
-    -- Save all 4 modifier combinations
+    -- Check which modifier combinations are valid for this key
+    local is_valid_ctrl, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, false, true)
+    local is_valid_alt, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, true, false)
+    local is_valid_shift, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], true, false, false)
+    
+    -- Save all 4 modifier combinations (only if valid)
     if not save_modifier_binding(keyboard_ui.command_text_none[1], keyboard_ui.is_macro_none[1], 
                                   keyboard_ui.macro_text_none[1], false, false, false) then
         all_success = false
     end
     
-    if not save_modifier_binding(keyboard_ui.command_text_ctrl[1], keyboard_ui.is_macro_ctrl[1], 
-                                  keyboard_ui.macro_text_ctrl[1], true, false, false) then
-        all_success = false
+    if is_valid_ctrl then
+        if not save_modifier_binding(keyboard_ui.command_text_ctrl[1], keyboard_ui.is_macro_ctrl[1], 
+                                      keyboard_ui.macro_text_ctrl[1], true, false, false) then
+            all_success = false
+        end
     end
     
-    if not save_modifier_binding(keyboard_ui.command_text_alt[1], keyboard_ui.is_macro_alt[1], 
-                                  keyboard_ui.macro_text_alt[1], false, true, false) then
-        all_success = false
+    if is_valid_alt then
+        if not save_modifier_binding(keyboard_ui.command_text_alt[1], keyboard_ui.is_macro_alt[1], 
+                                      keyboard_ui.macro_text_alt[1], false, true, false) then
+            all_success = false
+        end
     end
     
-    if not save_modifier_binding(keyboard_ui.command_text_shift[1], keyboard_ui.is_macro_shift[1], 
-                                  keyboard_ui.macro_text_shift[1], false, false, true) then
-        all_success = false
+    if is_valid_shift then
+        if not save_modifier_binding(keyboard_ui.command_text_shift[1], keyboard_ui.is_macro_shift[1], 
+                                      keyboard_ui.macro_text_shift[1], false, false, true) then
+            all_success = false
+        end
     end
     
     if not all_success then
@@ -412,12 +449,20 @@ local function render_binding_editor()
     -- Calculate label width for alignment
     local label_width = 80
     
-    -- Display error message if any
-    if keyboard_ui.error_message ~= '' then
-        imgui.PushStyleColor(ImGuiCol_Text, { 1.0, 0.3, 0.3, 1.0 });
-        imgui.Text('Error: ' .. keyboard_ui.error_message);
-        imgui.PopStyleColor();
-        imgui.Spacing();
+    -- Check which modifier combinations are valid for the selected key
+    local show_none = true -- Always show base key
+    local show_ctrl = false
+    local show_alt = false
+    local show_shift = false
+    
+    if keyboard_ui.binding_key[1] ~= '' then
+        local is_valid_ctrl, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, false, true)
+        local is_valid_alt, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, true, false)
+        local is_valid_shift, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], true, false, false)
+        
+        show_ctrl = is_valid_ctrl
+        show_alt = is_valid_alt
+        show_shift = is_valid_shift
     end
     
     -- Render the 4 binding rows with "Macro" header
@@ -429,38 +474,44 @@ local function render_binding_editor()
     imgui.Spacing();
     
     -- [KEY]
-    render_binding_row((keyboard_ui.binding_key[1] ~= '' and keyboard_ui.binding_key[1] or 'KEY'), 
-                       keyboard_ui.command_text_none, 
-                       keyboard_ui.is_macro_none, 
-                       keyboard_ui.macro_text_none, 
-                       label_width);
-    
-    imgui.Spacing();
+    if show_none then
+        render_binding_row((keyboard_ui.binding_key[1] ~= '' and keyboard_ui.binding_key[1] or 'KEY'), 
+                           keyboard_ui.command_text_none, 
+                           keyboard_ui.is_macro_none, 
+                           keyboard_ui.macro_text_none, 
+                           label_width);
+        imgui.Spacing();
+    end
     
     -- + Ctrl
-    render_binding_row('+ Ctrl', 
-                       keyboard_ui.command_text_ctrl, 
-                       keyboard_ui.is_macro_ctrl, 
-                       keyboard_ui.macro_text_ctrl, 
-                       label_width);
-    
-    imgui.Spacing();
+    if show_ctrl then
+        render_binding_row('+ Ctrl', 
+                           keyboard_ui.command_text_ctrl, 
+                           keyboard_ui.is_macro_ctrl, 
+                           keyboard_ui.macro_text_ctrl, 
+                           label_width);
+        imgui.Spacing();
+    end
     
     -- + Alt
-    render_binding_row('+ Alt', 
-                       keyboard_ui.command_text_alt, 
-                       keyboard_ui.is_macro_alt, 
-                       keyboard_ui.macro_text_alt, 
-                       label_width);
-    
-    imgui.Spacing();
+    if show_alt then
+        render_binding_row('+ Alt', 
+                           keyboard_ui.command_text_alt, 
+                           keyboard_ui.is_macro_alt, 
+                           keyboard_ui.macro_text_alt, 
+                           label_width);
+        imgui.Spacing();
+    end
     
     -- + Shift
-    render_binding_row('+ Shift', 
-                       keyboard_ui.command_text_shift, 
-                       keyboard_ui.is_macro_shift, 
-                       keyboard_ui.macro_text_shift, 
-                       label_width);
+    if show_shift then
+        render_binding_row('+ Shift', 
+                           keyboard_ui.command_text_shift, 
+                           keyboard_ui.is_macro_shift, 
+                           keyboard_ui.macro_text_shift, 
+                           label_width);
+        imgui.Spacing();
+    end
     
     imgui.Spacing();
     imgui.Separator();
