@@ -631,10 +631,10 @@ local function render_binding_editor()
     
     -- Disable and gray out Save button if invalid characters detected
     if has_any_invalid then
-        imgui.PushStyleColor(ImGuiCol_Button, { 0.2, 0.2, 0.2, 1.0 });
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.2, 0.2, 0.2, 1.0 });
-        imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.2, 0.2, 0.2, 1.0 });
-        imgui.PushStyleColor(ImGuiCol_Text, { 0.5, 0.5, 0.5, 1.0 });
+        imgui.PushStyleColor(ImGuiCol_Button, { 0.4, 0.1, 0.1, 0.6 });
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.4, 0.1, 0.1, 0.6 });
+        imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.4, 0.1, 0.1, 0.6 });
+        imgui.PushStyleVar(ImGuiStyleVar_Alpha, 0.5);
     end
     
     -- Save and Delete buttons at the bottom
@@ -646,7 +646,8 @@ local function render_binding_editor()
     end
     
     if has_any_invalid then
-        imgui.PopStyleColor(4);
+        imgui.PopStyleVar();
+        imgui.PopStyleColor(3);
     end
     
     if save_clicked and not has_any_invalid then
