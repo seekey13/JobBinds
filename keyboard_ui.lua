@@ -559,8 +559,11 @@ local function render_binding_editor()
     show_alt = is_valid_alt
     show_shift = is_valid_shift
     
-    -- Render the 4 binding rows with "Macro" header
-    imgui.Text('Command:');
+    -- Render the 4 binding rows with headers
+    imgui.Text('Binding');
+    imgui.SameLine();
+    imgui.SetCursorPosX(135); -- Above the X button
+    imgui.Text('Command');
     imgui.SameLine();
     imgui.SetCursorPosX(label_width + 314); -- Align Macro Text
     imgui.Text('Macro');
@@ -628,7 +631,10 @@ local function render_binding_editor()
     
     -- Disable and gray out Save button if invalid characters detected
     if has_any_invalid then
-        imgui.PushStyleVar(ImGuiStyleVar_Alpha, 0.5);
+        imgui.PushStyleColor(ImGuiCol_Button, { 0.2, 0.2, 0.2, 1.0 });
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.2, 0.2, 0.2, 1.0 });
+        imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.2, 0.2, 0.2, 1.0 });
+        imgui.PushStyleColor(ImGuiCol_Text, { 0.5, 0.5, 0.5, 1.0 });
     end
     
     -- Save and Delete buttons at the bottom
@@ -640,7 +646,7 @@ local function render_binding_editor()
     end
     
     if has_any_invalid then
-        imgui.PopStyleVar();
+        imgui.PopStyleColor(4);
     end
     
     if save_clicked and not has_any_invalid then
