@@ -156,7 +156,7 @@ Open an issue or pull request on the [GitHub repository](https://github.com/seek
 
 ## Changelog
 
-### Version 0.5 (Current)
+### Version 1.0 (Current)
 - Visual keyboard interface with interactive key selection
 - Color-coded keyboard keys with status tooltips
 - Script browser with automatic job profile filtering
