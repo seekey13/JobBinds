@@ -175,6 +175,20 @@ local function render_key_button(key, width)
         button_clicked = imgui.Button(key, { width, 30 });
     end
     
+    -- Show tooltip on hover if key has bindings
+    if is_bound and imgui.IsItemHovered() then
+        local tooltip_lines = {};
+        for _, binding in ipairs(current_bindings) do
+            if binding.key:upper() == key:upper() then
+                local modifier_text = binding.modifiers ~= '' and (binding.modifiers .. ' + ') or '';
+                table.insert(tooltip_lines, modifier_text .. binding.key .. ': ' .. binding.command);
+            end
+        end
+        if #tooltip_lines > 0 then
+            imgui.SetTooltip(table.concat(tooltip_lines, '\n'));
+        end
+    end
+    
     if button_clicked then
         -- Handle key click - populate UI with existing bindings for all modifier combinations
         keyboard_ui.binding_key[1] = key:upper();
@@ -572,7 +586,7 @@ local function render_binding_editor()
     
     -- [KEY]
     if show_none then
-        render_binding_row(keyboard_ui.binding_key[1], 
+        render_binding_row(keyboard_ui.binding_key[1]+'    ', 
                            keyboard_ui.command_text_none, 
                            keyboard_ui.is_macro_none, 
                            keyboard_ui.macro_text_none, 
@@ -668,6 +682,15 @@ local function render_binding_editor()
         end
     end
     
+    -- Display current profile/job combination
+    imgui.SameLine();
+    imgui.Dummy({ 164, 0 }); -- Move right 164px
+    imgui.SameLine();
+    local profile_display = keyboard_ui.current_profile or 'No Profile Loaded';
+    -- Convert WAR_NIN.txt format to WAR/NIN display
+    profile_display = profile_display:gsub('%.txt$', ''):gsub('_', '/');
+    imgui.Text(profile_display);
+    
     -- Key binding detection (simplified for demo)
     if keyboard_ui.is_binding then
         for key_code = 1, 255 do
@@ -707,7 +730,7 @@ function keyboard_ui.render()
     end
 
     -- Window automatically sizes to content
-    if imgui.Begin('JobBinds Keyboard Interface', keyboard_ui.is_open, ImGuiWindowFlags_AlwaysAutoResize) then
+    if imgui.Begin('JobBinds', keyboard_ui.is_open, ImGuiWindowFlags_AlwaysAutoResize) then
         -- Virtual keyboard on top
         render_virtual_keyboard();
         
