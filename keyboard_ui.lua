@@ -425,6 +425,18 @@ local function render_binding_editor()
         imgui.Text(label);
         imgui.SameLine();
         
+        -- Clear button aligned at fixed position
+        imgui.SetCursorPosX(112); -- Align Clear Button
+        if imgui.Button('X##clear_' .. label, { 20, 0 }) then
+            cmd_text[1] = '';
+            is_macro[1] = false;
+            macro_text[1] = '';
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip('Clear binding');
+        end
+        imgui.SameLine();
+        
         -- Align to the label width
         imgui.SetCursorPosX(label_width);
         
