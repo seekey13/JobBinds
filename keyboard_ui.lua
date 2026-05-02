@@ -70,12 +70,17 @@ local function refresh_scripts_list()
     keyboard_ui.available_scripts = {};
     local scripts_path = ui_functions.get_scripts_path();
     
+    -- Helper function to check if file is a job binding profile (JOB_JOB.txt format)
+    local function is_job_binding_file(filename)
+        return filename:match('^[A-Z][A-Z][A-Z]_[A-Z][A-Z][A-Z]%.txt$') ~= nil;
+    end
+    
     -- Use Lua's lfs library if available, otherwise use a simple file list
     local ok, lfs = pcall(require, 'lfs');
     if ok then
         -- Use lfs to list directory
         for file in lfs.dir(scripts_path) do
-            if file:match('%.txt$') then
+            if file:match('%.txt$') and not is_job_binding_file(file) then
                 table.insert(keyboard_ui.available_scripts, file);
             end
         end
@@ -85,7 +90,7 @@ local function refresh_scripts_list()
         local handle = io.popen('dir "' .. scripts_path .. '\\*.txt" /B 2>nul');
         if handle then
             for file in handle:lines() do
-                if file:match('%.txt$') then
+                if file:match('%.txt$') and not is_job_binding_file(file) then
                     table.insert(keyboard_ui.available_scripts, file);
                 end
             end
