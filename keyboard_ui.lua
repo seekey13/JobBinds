@@ -27,6 +27,11 @@ keyboard_ui.command_text_shift = { '' };
 keyboard_ui.is_macro_shift = { false };
 keyboard_ui.macro_text_shift = { '' };
 
+-- Script list state
+keyboard_ui.available_scripts = {};
+keyboard_ui.selected_script_index = { 0 };
+keyboard_ui.last_scripts_refresh = 0;
+
 keyboard_ui.current_profile = 'No Profile Loaded';
 keyboard_ui.is_binding = false;
 keyboard_ui.debug_mode = false;
@@ -59,6 +64,39 @@ local keyboard_layout = {
         {'M', 26}, {',', 26}, {'.', 26}, {'/', 26}, {'SHIFT', 78}
     }
 }
+
+-- Function to refresh the list of available script files
+local function refresh_scripts_list()
+    keyboard_ui.available_scripts = {};
+    local scripts_path = ui_functions.get_scripts_path();
+    
+    -- Use Lua's lfs library if available, otherwise use a simple file list
+    local ok, lfs = pcall(require, 'lfs');
+    if ok then
+        -- Use lfs to list directory
+        for file in lfs.dir(scripts_path) do
+            if file:match('%.txt$') then
+                table.insert(keyboard_ui.available_scripts, file);
+            end
+        end
+    else
+        -- Fallback: Try to execute dir command and parse output
+        -- This is Windows-specific
+        local handle = io.popen('dir "' .. scripts_path .. '\\*.txt" /B 2>nul');
+        if handle then
+            for file in handle:lines() do
+                if file:match('%.txt$') then
+                    table.insert(keyboard_ui.available_scripts, file);
+                end
+            end
+            handle:close();
+        end
+    end
+    
+    -- Sort alphabetically
+    table.sort(keyboard_ui.available_scripts);
+    keyboard_ui.last_scripts_refresh = os.time();
+end
 
 -- Function to render a virtual keyboard button
 local function render_key_button(key, width)
@@ -385,17 +423,9 @@ local function render_binding_editor()
         -- Align to the label width
         imgui.SetCursorPosX(label_width);
         
-        -- Dim the command text if macro mode is enabled
-        if is_macro[1] then
-            imgui.PushStyleVar(ImGuiStyleVar_Alpha, 0.6);
-        end
-        
+        -- Command text field (always editable, used for filename when macro mode)
         imgui.SetNextItemWidth(385);
-        imgui.InputText('##cmd_' .. label, cmd_text, 256, is_macro[1] and ImGuiInputTextFlags_ReadOnly or ImGuiInputTextFlags_None);
-        
-        if is_macro[1] then
-            imgui.PopStyleVar();
-        end
+        imgui.InputText('##cmd_' .. label, cmd_text, 256, ImGuiInputTextFlags_None);
         
         imgui.SameLine();
         
@@ -403,51 +433,64 @@ local function render_binding_editor()
         if imgui.Checkbox('##macro_' .. label, is_macro) then
             if is_macro[1] then
                 -- Switching to macro mode
-                if keyboard_ui.binding_key[1] ~= '' then
-                    local profile_base = keyboard_ui.current_profile or 'profile'
-                    if profile_base ~= 'No Profile Loaded' then
-                        profile_base = profile_base:gsub('%.txt$', '')
-                    else
-                        profile_base = 'profile'
+                -- Try to load existing macro content if filename is specified
+                if cmd_text[1] ~= '' then
+                    local macro_filename = cmd_text[1];
+                    if not macro_filename:match('%.txt$') then
+                        macro_filename = macro_filename .. '.txt';
                     end
-                    
-                    -- Determine modifiers based on label
-                    local has_ctrl = label:find('Ctrl') ~= nil
-                    local has_alt = label:find('Alt') ~= nil
-                    local has_shift = label:find('Shift') ~= nil
-                    
-                    local macro_filename = ui_functions.get_macro_filename(profile_base,
-                                                             keyboard_ui.binding_key[1],
-                                                             has_shift,
-                                                             has_alt,
-                                                             has_ctrl)
-                    cmd_text[1] = macro_filename:gsub('%.txt$', '')
-                    
-                    -- Try to load existing macro content
-                    local macro_path = string.format('%s/%s', ui_functions.get_scripts_path(), macro_filename)
-                    local macro_file = io.open(macro_path, 'r')
+                    local macro_path = string.format('%s/%s', ui_functions.get_scripts_path(), macro_filename);
+                    local macro_file = io.open(macro_path, 'r');
                     if macro_file then
-                        macro_text[1] = macro_file:read('*all') or ''
-                        macro_file:close()
+                        macro_text[1] = macro_file:read('*all') or '';
+                        macro_file:close();
                     end
                 end
             else
                 -- Switching to command mode
-                macro_text[1] = ''
-                cmd_text[1] = ''
+                macro_text[1] = '';
             end
         end
         
         -- Show macro text editor if in macro mode
         if is_macro[1] then
-            imgui.SetCursorPosX(label_width);
+            -- Refresh scripts list if needed (every 5 seconds)
+            if os.time() - keyboard_ui.last_scripts_refresh > 5 then
+                refresh_scripts_list();
+            end
+            
+            -- Create a horizontal layout: script list on left, macro text on right
+            -- Script list on the left
+            imgui.BeginChild('##scripts_child_' .. label, { 120, 100 }, true);
+            for i, script_name in ipairs(keyboard_ui.available_scripts) do
+                local is_selected = (keyboard_ui.selected_script_index[1] == i);
+                -- Display name without .txt extension
+                local display_name = script_name:gsub('%.txt$', '');
+                if imgui.Selectable(display_name, is_selected) then
+                    keyboard_ui.selected_script_index[1] = i;
+                    -- Load the selected script into the macro text field
+                    local script_path = string.format('%s/%s', ui_functions.get_scripts_path(), script_name);
+                    local script_file = io.open(script_path, 'r');
+                    if script_file then
+                        macro_text[1] = script_file:read('*all') or '';
+                        script_file:close();
+                        -- Also set the command text to the script name (without .txt)
+                        cmd_text[1] = script_name:gsub('%.txt$', '');
+                    end
+                end
+            end
+            imgui.EndChild();
+            
+            imgui.SameLine();
+            
+            -- Macro text editor on the right
             imgui.SetNextItemWidth(400);
-            imgui.InputTextMultiline('##macro_' .. label .. '_text', macro_text, 2048, { 417, 100 });
+            imgui.InputTextMultiline('##macro_' .. label .. '_text', macro_text, 2048, { 418, 100 });
         end
     end
     
     -- Calculate label width for alignment
-    local label_width = 80
+    local label_width = 136
     
     -- Show prompt if no key is selected
     if keyboard_ui.binding_key[1] == '' then
@@ -598,6 +641,10 @@ end
 
 function keyboard_ui.show()
     keyboard_ui.is_open[1] = true;
+    -- Refresh scripts list when showing UI
+    if keyboard_ui.last_scripts_refresh == 0 then
+        refresh_scripts_list();
+    end
 end
 
 function keyboard_ui.hide()
