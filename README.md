@@ -1,7 +1,5 @@
 # JobBinds
 
-<img width="500" alt="image" src="https://github.com/user-attachments/assets/720ee5c8-6ad9-4d89-a164-23a525a846a4" />
-
 JobBinds is an Ashita v4 addon for Final Fantasy XI that automatically loads keybind profile scripts based on your current job and subjob, featuring a built-in graphical configuration interface for managing your keybinds.
 
 > **Note:**  
@@ -9,16 +7,32 @@ JobBinds is an Ashita v4 addon for Final Fantasy XI that automatically loads key
 > Each profile must be named in the format `JOB_SUB.txt` (e.g., `WAR_NIN.txt`).  
 > No fallback or default profile is loaded if a job/subjob combination is missing.
 
----
+## Quick Setup
+### Click any key to configure bindings
+<img width="518" height="224" alt="image" src="https://github.com/user-attachments/assets/b82859b1-f3f0-4b82-8125-8ae065ee0d09" />
+
+### If you only have a single command just type it in and click save
+<img width="515" height="312" alt="image" src="https://github.com/user-attachments/assets/9652e4b2-0aff-4bb5-bb95-74cb1522cfdb" />
+
+### Enable the Macro checkbox to expand multiline binding, command name will be listed as a tooltip, scroll a list of other bindings in your `scripts` folder
+<img width="524" height="424" alt="image" src="https://github.com/user-attachments/assets/7f00c4f8-284c-4597-93f8-d89df085e3d4" />
+
+
+### Some keys do not have conflicting system functions and can bind Ctrl & Alt
+<img width="523" height="379" alt="image" src="https://github.com/user-attachments/assets/a917ecd3-188a-4aa3-855a-67e6b94c4745" />
+
+### Keys with Compact game function are disabled.
 
 ## Features
 
 - **Automatic Profile Switching:** Loads the correct keybind profile when you change jobs
-- **Graphical Configuration Interface:** Built-in ImGui interface for managing keybinds
-- **Real-time Key Validation:** Prevents binding of essential game keys with instant feedback
-- **Macro Support:** Create and edit multi-line macro files from the UI
-- **Profile Management:** Automatically unbinds previous profile keys before loading new ones
-- **Debug Mode:** Toggle detailed logging with `/jobbinds debug`
+- **Visual Keyboard Interface:** Interactive keyboard layout with color-coded keys (green=selected, standard=bound, gray=unbound, red=blocked)
+- **Script Browser:** Browse and load existing macros with automatic filtering of job profiles
+- **Filename Validation:** Real-time validation prevents invalid Windows filename characters
+- **Key Tooltips:** Hover over bound keys to see their commands
+- **Multi-Modifier Support:** Configure up to 4 bindings per key (base, Ctrl, Alt, Shift)
+- **Quick Clear:** Remove individual bindings with one-click Clear buttons
+- **Profile Display:** Shows current job/subjob combination in the interface
 
 ---
 
@@ -39,7 +53,7 @@ JobBinds is an Ashita v4 addon for Final Fantasy XI that automatically loads key
 4. Open the in-game configuration:
 
     ```
-    /jobbinds
+    /jb
     ```
 ---
 
@@ -49,17 +63,20 @@ JobBinds runs automatically in the background. When you change jobs or subjobs, 
 
 ### Commands
 
-- `/jobbinds` - Opens the configuration window
-- `/jobbinds debug` - Toggles debug mode
+- `/jb` or `/jobbinds` - Opens the configuration window
 
 ### Configuration Interface
 
-Access the configuration interface with `/jobbinds`:
+Access the keyboard interface with `/jb` or `/jobbinds`:
 
-- View and edit current keybinds
-- Create new bindings with key validation
-- Macro support for multi-line commands
-- Real-time profile updates
+- **Visual Keyboard:** Click any key to configure bindings
+- **Color Coding:** Green (selected), standard (bound), gray (unbound), dark red (blocked)
+- **Tooltips:** Hover over keys to see bound commands
+- **Binding Editor:** Configure up to 4 modifier combinations per key
+- **Script List:** Browse and load existing macros (filters out job profiles)
+- **Validation:** Red text indicates invalid filename characters; Save button disabled until fixed
+- **Clear Buttons:** Remove individual bindings without deleting entire key
+- **Profile Display:** Current job/subjob shown after Delete button
 
 ### Keybind Profiles
 
@@ -79,8 +96,6 @@ Access the configuration interface with `/jobbinds`:
   - `^` = Ctrl
   - `!` = Alt  
   - `+` = Shift
-  - `@` = Win
-  - `#` = Apps
 
 ### Blocked Keys
 
@@ -92,10 +107,6 @@ Essential game keys are protected from being bound:
 **System Keys:** Modifier keys and system shortcuts
 
 Some keys like `B` `E` `M` `Q` `T` `U` `X` and numbers can be used alone or with Shift, but not with Ctrl/Alt.
-
-### Debug Mode
-
-Enable debug mode with `/jobbinds debug` to see detailed logging of job changes, profile loading, and key operations.
 
 ---
 
@@ -145,7 +156,17 @@ Open an issue or pull request on the [GitHub repository](https://github.com/seek
 
 ## Changelog
 
-### Version 0.4 (Current)
+### Version 1.0 (Current)
+- Visual keyboard interface with interactive key selection
+- Color-coded keyboard keys with status tooltips
+- Script browser with automatic job profile filtering
+- Filename validation for macros with visual feedback
+- Clear buttons for individual bindings
+- Profile/job combination display
+- Multi-modifier support (base, Ctrl, Alt, Shift per key)
+- Removed legacy configuration UI
+
+### Version 0.4
 - Enhanced messaging system with color-coded chat output
 - Comprehensive key blocking with real-time validation
 - Code consolidation and improved maintainability
