@@ -256,8 +256,9 @@ ashita.events.register('command', 'jobbinds_command', function(e)
         end
     else
         -- Handle unknown commands
-        printf('Usage: /jobbinds [debug]')
+        printf('Usage: /jobbinds [debug]  (or /jb)')
         printf('  /jobbinds       - Open keyboard interface')
+        printf('  /jb             - Shortcut for /jobbinds')
         printf('  /jobbinds debug - Toggle debug information')
     end
 end)
