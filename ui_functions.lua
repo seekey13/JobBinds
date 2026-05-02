@@ -5,7 +5,13 @@
 --]]
 
 require('common');
+local chat = require('chat');
 local blocked_keybinds = require('blocked_keybinds');
+
+-- Custom print functions
+local function printf(fmt, ...) print(chat.header('JobBinds') .. chat.message(fmt:format(...))) end
+local function warnf(fmt, ...) print(chat.header('JobBinds') .. chat.warning(fmt:format(...))) end
+local function errorf(fmt, ...) print(chat.header('JobBinds') .. chat.error(fmt:format(...))) end
 
 local ui_functions = {};
 
@@ -134,7 +140,7 @@ end
 function ui_functions.save_bindings_to_profile(current_bindings, current_profile_path, debug_mode)
     if not current_profile_path then
         if debug_mode then
-            print('[JobBinds] No profile path available for saving')
+            errorf('[DEBUG] No profile path available for saving')
         end
         return false
     end
@@ -142,7 +148,7 @@ function ui_functions.save_bindings_to_profile(current_bindings, current_profile
     local file = io.open(current_profile_path, 'w')
     if not file then
         if debug_mode then
-            print('[JobBinds] Could not open profile file for writing: ' .. current_profile_path)
+            errorf('[DEBUG] Could not open profile file for writing: %s', current_profile_path)
         end
         return false
     end
@@ -152,14 +158,14 @@ function ui_functions.save_bindings_to_profile(current_bindings, current_profile
         local bind_command = ui_functions.generate_bind_command(binding)
         file:write(bind_command .. '\n')
         if debug_mode then
-            print('[JobBinds] Wrote binding: ' .. bind_command)
+            printf('[DEBUG] Wrote binding: %s', bind_command)
         end
     end
     
     file:close()
     
     if debug_mode then
-        print('[JobBinds] Saved ' .. #current_bindings .. ' bindings to: ' .. current_profile_path)
+        printf('[DEBUG] Saved %d bindings to: %s', #current_bindings, current_profile_path)
     end
     
     return true
@@ -228,7 +234,7 @@ function ui_functions.load_bindings_from_profile(profile_path, debug_mode)
     
     if not profile_path then
         if debug_mode then
-            print('[JobBinds] No profile path provided')
+            warnf('[DEBUG] No profile path provided')
         end
         return current_bindings
     end
@@ -236,7 +242,7 @@ function ui_functions.load_bindings_from_profile(profile_path, debug_mode)
     local file = io.open(profile_path, 'r')
     if not file then
         if debug_mode then
-            print('[JobBinds] Could not open profile file: ' .. profile_path)
+            warnf('[DEBUG] Could not open profile file: %s', profile_path)
         end
         return current_bindings
     end
@@ -254,14 +260,15 @@ function ui_functions.load_bindings_from_profile(profile_path, debug_mode)
                 table.insert(current_bindings, binding)
                 bind_count = bind_count + 1
                 if debug_mode then
-                    print('[JobBinds] Parsed binding: ' .. binding.key .. 
-                          (binding.modifiers ~= '' and (' (' .. binding.modifiers .. ')') or '') .. 
-                          ' -> ' .. binding.command .. 
-                          (binding.is_macro and ' [MACRO]' or ''))
+                    printf('[DEBUG] Parsed binding: %s%s -> %s%s', 
+                           binding.key,
+                           binding.modifiers ~= '' and (' (' .. binding.modifiers .. ')') or '',
+                           binding.command,
+                           binding.is_macro and ' [MACRO]' or '')
                 end
             else
                 if debug_mode then
-                    print('[JobBinds] Failed to parse bind line: ' .. line)
+                    warnf('[DEBUG] Failed to parse bind line: %s', line)
                 end
             end
         end
@@ -270,7 +277,7 @@ function ui_functions.load_bindings_from_profile(profile_path, debug_mode)
     file:close()
     
     if debug_mode then
-        print('[JobBinds] Loaded ' .. bind_count .. ' bindings from ' .. line_count .. ' lines in: ' .. profile_path)
+        printf('[DEBUG] Loaded %d bindings from %d lines in: %s', bind_count, line_count, profile_path)
     end
     
     return current_bindings

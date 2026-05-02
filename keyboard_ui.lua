@@ -1,8 +1,13 @@
 require('common');
+local chat = require('chat');
 local imgui = require('imgui');
 local vk_codes = require('vk_codes');
 local blocked_keybinds = require('blocked_keybinds');
 local ui_functions = require('ui_functions');
+
+-- Custom print functions
+local function printf(fmt, ...) print(chat.header('JobBinds') .. chat.message(fmt:format(...))) end
+local function errorf(fmt, ...) print(chat.header('JobBinds') .. chat.error(fmt:format(...))) end
 
 -- UI state variables
 local keyboard_ui = {};
@@ -666,9 +671,9 @@ local function render_binding_editor()
     
     if save_clicked and not has_any_invalid then
         if save_current_binding() then
-            print('[JobBinds-KB] Bindings saved successfully')
+            printf('Bindings saved successfully')
         else
-            print('[JobBinds-KB] Failed to save bindings')
+            errorf('Failed to save bindings')
         end
     end
     
@@ -676,9 +681,9 @@ local function render_binding_editor()
     
     if imgui.Button('Delete', { 120, 0 }) then
         if delete_current_binding() then
-            print('[JobBinds-KB] Bindings deleted successfully')
+            printf('Bindings deleted successfully')
         else
-            print('[JobBinds-KB] Failed to delete bindings')
+            errorf('Failed to delete bindings')
         end
     end
     
@@ -701,13 +706,13 @@ local function render_binding_editor()
                     keyboard_ui.binding_key[1] = key_name;
                     keyboard_ui.is_binding = false;
                     if keyboard_ui.debug_mode then
-                        print('[JobBinds-KB] Detected key: ' .. key_name .. ' (code: ' .. key_code .. ')');
+                        printf('[DEBUG] Detected key: %s (code: %d)', key_name, key_code);
                     end
                 else
                     keyboard_ui.binding_key[1] = 'KEY_' .. key_code;
                     keyboard_ui.is_binding = false;
                     if keyboard_ui.debug_mode then
-                        print('[JobBinds-KB] Detected unknown key code: ' .. key_code);
+                        printf('[DEBUG] Detected unknown key code: %d', key_code);
                     end
                 end
                 break;
@@ -717,7 +722,7 @@ local function render_binding_editor()
         if ok and is_pressed then
             keyboard_ui.is_binding = false;
             if keyboard_ui.debug_mode then
-                print('[JobBinds-KB] Escape pressed, canceling binding');
+                printf('[DEBUG] Escape pressed, canceling binding');
             end
         end
     end
