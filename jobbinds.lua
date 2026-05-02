@@ -14,7 +14,6 @@ addon.link      = 'https://github.com/seekey13/jobbinds';
 
 require('common');
 local chat = require('chat')
-local config_ui = require('config_ui');
 local keyboard_ui = require('keyboard_ui');
 local blocked_keybinds = require('blocked_keybinds');
 
@@ -128,10 +127,8 @@ local function get_safe_job_name(jobid)
     return jobid and get_job_shortname(jobid) or 'nil'
 end
 
--- Helper: Update config UI with profile information
-local function update_config_ui(profile_filename, profile_path)
-    config_ui.set_current_profile(profile_filename)
-    config_ui.load_profile(profile_path)
+-- Helper: Update keyboard UI with profile information
+local function update_keyboard_ui(profile_filename, profile_path)
     keyboard_ui.set_current_profile(profile_filename)
     keyboard_ui.load_profile(profile_path)
 end
@@ -157,8 +154,8 @@ local function load_profile(jobid, subjobid)
     end)
     if ok then
         printf('Loaded jobbinds profile: %s', profile_filename)
-        -- Update the config UI with the current profile
-        update_config_ui(profile_filename, profile_path)
+        -- Update the keyboard UI with the current profile
+        update_keyboard_ui(profile_filename, profile_path)
         debugf('Successfully loaded and updated UI with profile: %s', profile_filename)
         return true
     else
@@ -192,8 +189,8 @@ local function handle_job_change()
     
     -- Unload previous profile
     unload_profile(last_profile_keys)
-    -- Clear the config UI profile name and bindings
-    update_config_ui(nil, nil)
+    -- Clear the keyboard UI profile name and bindings
+    update_keyboard_ui(nil, nil)
     
     -- Update job tracking
     last_job, last_subjob = jobid, subjobid
@@ -244,7 +241,6 @@ ashita.events.register('command', 'jobbinds_command', function(e)
     elseif #args == 2 and args[2]:lower() == 'debug' then
         -- Toggle debug mode
         debug_mode = not debug_mode
-        config_ui.set_debug_mode(debug_mode)  -- Update UI debug mode
         keyboard_ui.set_debug_mode(debug_mode)  -- Update keyboard UI debug mode
         printf('Debug mode %s.', debug_mode and 'enabled' or 'disabled')
         if debug_mode then
@@ -265,7 +261,6 @@ end)
 
 -- Render loop for ImGui
 ashita.events.register('d3d_present', 'jobbinds_render', function()
-    config_ui.render()
     keyboard_ui.render()
 end)
 

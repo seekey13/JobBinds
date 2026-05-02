@@ -65,6 +65,15 @@ local keyboard_layout = {
     }
 }
 
+-- Function to validate filename doesn't contain invalid characters
+local function has_invalid_filename_chars(filename)
+    if not filename or filename == '' then
+        return false
+    end
+    -- Check for Windows invalid filename characters: \ / : * ? " < > |
+    return filename:match('[\\/:*?"<>|]') ~= nil
+end
+
 -- Function to refresh the list of available script files
 local function refresh_scripts_list()
     keyboard_ui.available_scripts = {};
@@ -440,9 +449,26 @@ local function render_binding_editor()
         -- Align to the label width
         imgui.SetCursorPosX(label_width);
         
+        -- Check for invalid filename characters when in macro mode
+        local has_invalid_chars = is_macro[1] and has_invalid_filename_chars(cmd_text[1]);
+        
+        -- Set text color to red if invalid characters in macro mode
+        if has_invalid_chars then
+            imgui.PushStyleColor(ImGuiCol_Text, { 1.0, 0.3, 0.3, 1.0 });
+        end
+        
         -- Command text field (always editable, used for filename when macro mode)
         imgui.SetNextItemWidth(330); -- Align Command Text Width
         imgui.InputText('##cmd_' .. label, cmd_text, 256, ImGuiInputTextFlags_None);
+        
+        -- Show tooltip if invalid characters detected
+        if has_invalid_chars and imgui.IsItemHovered() then
+            imgui.SetTooltip('A file name can\'t contain any of the following characters:\n\\ / : * ? " < > |');
+        end
+        
+        if has_invalid_chars then
+            imgui.PopStyleColor();
+        end
         
         imgui.SameLine();
         
@@ -585,8 +611,39 @@ local function render_binding_editor()
     imgui.Separator();
     imgui.Spacing();
     
+    -- Check if any macro bindings have invalid filename characters
+    local has_any_invalid = false;
+    if keyboard_ui.is_macro_none[1] and has_invalid_filename_chars(keyboard_ui.command_text_none[1]) then
+        has_any_invalid = true;
+    end
+    if keyboard_ui.is_macro_ctrl[1] and has_invalid_filename_chars(keyboard_ui.command_text_ctrl[1]) then
+        has_any_invalid = true;
+    end
+    if keyboard_ui.is_macro_alt[1] and has_invalid_filename_chars(keyboard_ui.command_text_alt[1]) then
+        has_any_invalid = true;
+    end
+    if keyboard_ui.is_macro_shift[1] and has_invalid_filename_chars(keyboard_ui.command_text_shift[1]) then
+        has_any_invalid = true;
+    end
+    
+    -- Disable and gray out Save button if invalid characters detected
+    if has_any_invalid then
+        imgui.PushStyleVar(ImGuiStyleVar_Alpha, 0.5);
+    end
+    
     -- Save and Delete buttons at the bottom
-    if imgui.Button('Save', { 120, 0 }) then
+    local save_clicked = imgui.Button('Save', { 120, 0 });
+    
+    -- Show tooltip on disabled Save button
+    if has_any_invalid and imgui.IsItemHovered() then
+        imgui.SetTooltip('A file name can\'t contain any of the following characters:\n\\ / : * ? " < > |');
+    end
+    
+    if has_any_invalid then
+        imgui.PopStyleVar();
+    end
+    
+    if save_clicked and not has_any_invalid then
         if save_current_binding() then
             print('[JobBinds-KB] Bindings saved successfully')
         else
