@@ -227,8 +227,12 @@ end)
 -- Command handler for /jobbinds and /jb
 ashita.events.register('command', 'jobbinds_command', function(e)
     local args = e.command:args()
+    if #args == 0 then
+        return
+    end
+    
     local cmd = args[1]:lower()
-    if #args == 0 or (cmd ~= '/jobbinds' and cmd ~= '/jb') then
+    if cmd ~= '/jobbinds' and cmd ~= '/jb' then
         return
     end
     

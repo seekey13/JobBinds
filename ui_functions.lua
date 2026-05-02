@@ -174,7 +174,8 @@ end
 -- Function to parse a bind command line
 function ui_functions.parse_bind_line(line)
     -- Pattern to match: /bind [modifiers+]key "command" or /bind [modifiers+]key command
-    local modifiers_key, command = line:match('^/bind%s+([!@#%^+%w]+)%s+(.+)$')
+    -- Expanded pattern to include punctuation keys: -, =, [, ], \, ;, ', ,, ., /, `, etc.
+    local modifiers_key, command = line:match('^/bind%s+([!@#%%^+%w%-%=%[%]\\%;%\',%%.%/%`]+)%s+(.+)$')
     if not modifiers_key or not command then
         return nil
     end

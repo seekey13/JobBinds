@@ -48,6 +48,7 @@ M.blocked = {
     ['SPACE'] = true,
     ['PRINTSCREEN'] = true,
     ['CAPS'] = true,
+    ['CAPSLOCK'] = true,
     ['LCTRL'] = true,
     ['RCTRL'] = true,
     ['CTRL'] = true,

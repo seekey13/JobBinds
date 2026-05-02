@@ -92,10 +92,13 @@ local function refresh_scripts_list()
     -- Use Lua's lfs library if available, otherwise use a simple file list
     local ok, lfs = pcall(require, 'lfs');
     if ok then
-        -- Use lfs to list directory
-        for file in lfs.dir(scripts_path) do
-            if file:match('%.txt$') and not is_job_binding_file(file) then
-                table.insert(keyboard_ui.available_scripts, file);
+        -- Use lfs to list directory (wrapped in pcall to handle missing directory)
+        local dir_ok, dir_iter, dir_obj = pcall(lfs.dir, scripts_path);
+        if dir_ok and dir_iter then
+            for file in dir_iter, dir_obj do
+                if file:match('%.txt$') and not is_job_binding_file(file) then
+                    table.insert(keyboard_ui.available_scripts, file);
+                end
             end
         end
     else
@@ -591,7 +594,7 @@ local function render_binding_editor()
     
     -- [KEY]
     if show_none then
-        render_binding_row(keyboard_ui.binding_key[1]+'    ', 
+        render_binding_row(keyboard_ui.binding_key[1]..'    ', 
                            keyboard_ui.command_text_none, 
                            keyboard_ui.is_macro_none, 
                            keyboard_ui.macro_text_none, 
