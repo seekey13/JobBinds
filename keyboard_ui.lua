@@ -75,8 +75,8 @@ local function has_invalid_filename_chars(filename)
     if not filename or filename == '' then
         return false
     end
-    -- Check for Windows invalid filename characters: \ / : * ? " < > |
-    return filename:match('[\\/:*?"<>|]') ~= nil
+    -- Check for Windows invalid filename characters: \ / : * ? " < > | and spaces
+    return filename:match('[\\/:*?"<>| ]') ~= nil
 end
 
 -- Function to refresh the list of available script files
@@ -485,7 +485,7 @@ local function render_binding_editor()
         
         -- Show tooltip if invalid characters detected
         if has_invalid_chars and imgui.IsItemHovered() then
-            imgui.SetTooltip('A file name can\'t contain any of the following characters:\n\\ / : * ? " < > |');
+            imgui.SetTooltip('A file name can\'t contain any of the following characters:\n\\ / : * ? " < > | or spaces');
         end
         
         if has_invalid_chars then
@@ -664,7 +664,7 @@ local function render_binding_editor()
     
     -- Show tooltip on disabled Save button
     if has_any_invalid and imgui.IsItemHovered() then
-        imgui.SetTooltip('A file name can\'t contain any of the following characters:\n\\ / : * ? " < > |');
+        imgui.SetTooltip('A file name can\'t contain any of the following characters:\n\\ / : * ? " < > | or spaces');
     end
     
     if has_any_invalid then

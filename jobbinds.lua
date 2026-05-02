@@ -221,9 +221,6 @@ ashita.events.register('packet_in', 'jobbinds_packet_in', function(e)
     end
 end)
 
--- On zone change (optional: could unload/reload profile, but FFXI job changes are not zone-based)
--- You could hook 0x0A (zone enter) if needed.
-
 -- Command handler for /jobbinds and /jb
 ashita.events.register('command', 'jobbinds_command', function(e)
     local args = e.command:args()
@@ -267,8 +264,6 @@ end)
 ashita.events.register('d3d_present', 'jobbinds_render', function()
     keyboard_ui.render()
 end)
-
--- For future: Add a /jobbinds debug command, or more options.
 
 -- Startup message
 printf('JobBinds v%s by %s loaded. Profiles will auto-load on job/subjob change.', addon.version, addon.author)
