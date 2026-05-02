@@ -1,6 +1,19 @@
 # JobBinds
 
-<img width="500" alt="image" src="https://github.com/user-attachments/assets/720ee5c8-6ad9-4d89-a164-23a525a846a4" />
+### Click any key to configure bindings
+<img width="518" height="224" alt="image" src="https://github.com/user-attachments/assets/b82859b1-f3f0-4b82-8125-8ae065ee0d09" />
+
+### If you only have a single command just type it in and click save
+<img width="515" height="312" alt="image" src="https://github.com/user-attachments/assets/9652e4b2-0aff-4bb5-bb95-74cb1522cfdb" />
+
+### Enable the Macro checkbox to expand multiline binding, command name will be listed as a tooltip.
+<img width="524" height="424" alt="image" src="https://github.com/user-attachments/assets/7f00c4f8-284c-4597-93f8-d89df085e3d4" />
+
+
+### Some keys do not have conflicting system functions and can bind Ctrl & Alt
+<img width="523" height="379" alt="image" src="https://github.com/user-attachments/assets/a917ecd3-188a-4aa3-855a-67e6b94c4745" />
+
+### Keys with Compact game function are disabled.
 
 JobBinds is an Ashita v4 addon for Final Fantasy XI that automatically loads keybind profile scripts based on your current job and subjob, featuring a built-in graphical configuration interface for managing your keybinds.
 
