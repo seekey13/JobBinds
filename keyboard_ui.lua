@@ -429,7 +429,7 @@ local function render_binding_editor()
         imgui.SetCursorPosX(label_width);
         
         -- Command text field (always editable, used for filename when macro mode)
-        imgui.SetNextItemWidth(385);
+        imgui.SetNextItemWidth(330); -- Align Command Text Width
         imgui.InputText('##cmd_' .. label, cmd_text, 256, ImGuiInputTextFlags_None);
         
         imgui.SameLine();
@@ -490,12 +490,12 @@ local function render_binding_editor()
             
             -- Macro text editor on the right
             imgui.SetNextItemWidth(400);
-            imgui.InputTextMultiline('##macro_' .. label .. '_text', macro_text, 2048, { 418, 100 });
+            imgui.InputTextMultiline('##macro_' .. label .. '_text', macro_text, 2048, { 362, 100 }); -- Align Macro Text Width
         end
     end
     
     -- Calculate label width for alignment
-    local label_width = 136
+    local label_width = 136 -- Align Label Width
     
     -- Show prompt if no key is selected
     if keyboard_ui.binding_key[1] == '' then
@@ -524,7 +524,7 @@ local function render_binding_editor()
     -- Render the 4 binding rows with "Macro" header
     imgui.Text('Command:');
     imgui.SameLine();
-    imgui.SetCursorPosX(label_width + 370);
+    imgui.SetCursorPosX(label_width + 314); -- Align Macro Text
     imgui.Text('Macro');
     
     imgui.Spacing();
