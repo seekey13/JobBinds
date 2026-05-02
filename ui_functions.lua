@@ -382,18 +382,16 @@ function ui_functions.save_current_binding(binding_data, current_bindings, curre
     
     -- Handle macro
     if binding_data.is_macro then
-        -- Extract profile name from path
-        local profile_base = 'profile'
-        if current_profile_path then
-            profile_base = current_profile_path:match('([^/\\]+)%.txt$') or 'profile'
+        -- Use the user-specified filename from binding_data.command
+        local macro_filename = binding_data.command
+        if not macro_filename or macro_filename == '' then
+            return false, 'Please enter a macro filename'
         end
         
-        -- Generate macro filename
-        local macro_filename = ui_functions.get_macro_filename(profile_base, 
-                                                               binding_data.key, 
-                                                               binding_data.shift_modifier, 
-                                                               binding_data.alt_modifier, 
-                                                               binding_data.ctrl_modifier)
+        -- Ensure .txt extension
+        if not macro_filename:match('%.txt$') then
+            macro_filename = macro_filename .. '.txt'
+        end
         
         -- Save macro content to file
         if not ui_functions.create_macro_file(macro_filename, binding_data.macro_text) then
