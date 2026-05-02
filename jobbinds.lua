@@ -237,9 +237,9 @@ ashita.events.register('command', 'jobbinds_command', function(e)
     e.blocked = true
     
     if #args == 1 then
-        -- No additional arguments, show the config UI
-        config_ui.show()
-        printf('Opening JobBinds configuration window.')
+        -- No additional arguments, show the keyboard UI
+        keyboard_ui.show()
+        printf('Opening JobBinds keyboard interface.')
     elseif #args == 2 and args[2]:lower() == 'debug' then
         -- Toggle debug mode
         debug_mode = not debug_mode
@@ -253,16 +253,11 @@ ashita.events.register('command', 'jobbinds_command', function(e)
                    get_safe_job_name(last_subjob))
             debugf('Profile keys tracked: %d', last_profile_keys and #last_profile_keys or 0)
         end
-    elseif #args == 2 and args[2]:lower() == 'kb' then
-        -- Show the keyboard UI
-        keyboard_ui.show()
-        printf('Opening JobBinds keyboard interface.')
     else
         -- Handle unknown commands
-        printf('Usage: /jobbinds [debug|kb]')
-        printf('  /jobbinds       - Open configuration window')
+        printf('Usage: /jobbinds [debug]')
+        printf('  /jobbinds       - Open keyboard interface')
         printf('  /jobbinds debug - Toggle debug information')
-        printf('  /jobbinds kb    - Open keyboard interface')
     end
 end)
 
