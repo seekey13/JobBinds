@@ -149,15 +149,15 @@ local function render_key_button(key, width)
         push_colors = true
         push_alpha = true
     elseif keyboard_ui.binding_key[1] ~= '' and keyboard_ui.binding_key[1]:upper() == key:upper() then
-        -- Selected key: default ImGui styling (matching New/Save/Delete buttons)
-        -- No custom styling - uses default ImGui button colors
-        push_colors = false
-    elseif is_bound then
-        -- Bound keys: green (darker)
+        -- Selected key: green (active binding being edited)
         imgui.PushStyleColor(ImGuiCol_Button, { 0.1, 0.6, 0.1, 1.0 });
         imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.15, 0.7, 0.15, 1.0 });
         imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.08, 0.5, 0.08, 1.0 });
         push_colors = true
+    elseif is_bound then
+        -- Bound keys: default ImGui styling (standard button color)
+        -- No custom styling - uses default ImGui button colors
+        push_colors = false
     else
         -- Normal keys: gray
         imgui.PushStyleColor(ImGuiCol_Button, { 0.3, 0.3, 0.3, 1.0 });
