@@ -89,6 +89,12 @@ local function refresh_scripts_list()
         return filename:match('^[A-Z][A-Z][A-Z]_[A-Z][A-Z][A-Z]%.txt$') ~= nil;
     end
     
+    -- Helper function to check if file should be ignored
+    local function is_ignored_file(filename)
+        local lower = filename:lower();
+        return lower == 'default.txt' or lower == 'launcher.txt';
+    end
+    
     -- Use Lua's lfs library if available, otherwise use a simple file list
     local ok, lfs = pcall(require, 'lfs');
     if ok then
@@ -96,7 +102,7 @@ local function refresh_scripts_list()
         local dir_ok, dir_iter, dir_obj = pcall(lfs.dir, scripts_path);
         if dir_ok and dir_iter then
             for file in dir_iter, dir_obj do
-                if file:match('%.txt$') and not is_job_binding_file(file) then
+                if file:match('%.txt$') and not is_job_binding_file(file) and not is_ignored_file(file) then
                     table.insert(keyboard_ui.available_scripts, file);
                 end
             end
@@ -107,7 +113,7 @@ local function refresh_scripts_list()
         local handle = io.popen('dir "' .. scripts_path .. '\\*.txt" /B 2>nul');
         if handle then
             for file in handle:lines() do
-                if file:match('%.txt$') and not is_job_binding_file(file) then
+                if file:match('%.txt$') and not is_job_binding_file(file) and not is_ignored_file(file) then
                     table.insert(keyboard_ui.available_scripts, file);
                 end
             end
