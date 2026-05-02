@@ -227,10 +227,11 @@ end)
 -- On zone change (optional: could unload/reload profile, but FFXI job changes are not zone-based)
 -- You could hook 0x0A (zone enter) if needed.
 
--- Command handler for /jobbinds
+-- Command handler for /jobbinds and /jb
 ashita.events.register('command', 'jobbinds_command', function(e)
     local args = e.command:args()
-    if #args == 0 or args[1]:lower() ~= '/jobbinds' then
+    local cmd = args[1]:lower()
+    if #args == 0 or (cmd ~= '/jobbinds' and cmd ~= '/jb') then
         return
     end
     
