@@ -615,6 +615,16 @@ local function render_binding_editor()
         imgui.Spacing();
     end
     
+    -- + Shift
+    if show_shift then
+        render_binding_row('+ Shift', 
+                           keyboard_ui.command_text_shift, 
+                           keyboard_ui.is_macro_shift, 
+                           keyboard_ui.macro_text_shift, 
+                           label_width);
+        imgui.Spacing();
+    end
+    
     -- + Ctrl
     if show_ctrl then
         render_binding_row('+ Ctrl', 
@@ -631,16 +641,6 @@ local function render_binding_editor()
                            keyboard_ui.command_text_alt, 
                            keyboard_ui.is_macro_alt, 
                            keyboard_ui.macro_text_alt, 
-                           label_width);
-        imgui.Spacing();
-    end
-    
-    -- + Shift
-    if show_shift then
-        render_binding_row('+ Shift', 
-                           keyboard_ui.command_text_shift, 
-                           keyboard_ui.is_macro_shift, 
-                           keyboard_ui.macro_text_shift, 
                            label_width);
         imgui.Spacing();
     end
@@ -708,7 +708,7 @@ local function render_binding_editor()
     
     -- Display current profile/job combination
     imgui.SameLine();
-    imgui.Dummy({ 143, 0 }); -- Move right 143px
+    imgui.Dummy({ 116, 0 }); -- Move right 116px
     imgui.SameLine();
     local profile_display = keyboard_ui.current_profile or 'No Profile Loaded';
     -- Convert WAR_NIN.txt format to WAR/NIN display
