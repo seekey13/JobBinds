@@ -492,7 +492,7 @@ local function render_binding_editor()
         end
         
         -- Command text field (always editable, used for filename when macro mode)
-        imgui.SetNextItemWidth(330); -- Align Command Text Width
+        imgui.SetNextItemWidth(389); -- Align Command Text Width
         imgui.InputText('##cmd_' .. label, cmd_text, 256, ImGuiInputTextFlags_None);
         
         -- Show tooltip if invalid characters detected
@@ -562,7 +562,7 @@ local function render_binding_editor()
             
             -- Macro text editor on the right
             imgui.SetNextItemWidth(400);
-            imgui.InputTextMultiline('##macro_' .. label .. '_text', macro_text, 2048, { 362, 100 }); -- Align Macro Text Width
+            imgui.InputTextMultiline('##macro_' .. label .. '_text', macro_text, 2048, { 421, 100 }); -- Align Macro Text Width
         end
     end
     
@@ -599,7 +599,7 @@ local function render_binding_editor()
     imgui.SetCursorPosX(135); -- Above the X button
     imgui.Text('Command');
     imgui.SameLine();
-    imgui.SetCursorPosX(label_width + 314); -- Align Macro Text
+    imgui.SetCursorPosX(label_width + 373); -- Align Macro Text
     imgui.Text('Macro');
     
     imgui.Spacing();
@@ -704,7 +704,7 @@ local function render_binding_editor()
     
     -- Display current profile/job combination
     imgui.SameLine();
-    imgui.Dummy({ 164, 0 }); -- Move right 164px
+    imgui.Dummy({ 223, 0 }); -- Move right 223px
     imgui.SameLine();
     local profile_display = keyboard_ui.current_profile or 'No Profile Loaded';
     -- Convert WAR_NIN.txt format to WAR/NIN display
