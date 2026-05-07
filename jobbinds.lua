@@ -133,20 +133,47 @@ local function update_keyboard_ui(profile_filename, profile_path)
     keyboard_ui.load_profile(profile_path)
 end
 
+-- Helper: Create an empty profile file for a job combination
+local function create_empty_profile(jobid, subjobid, profile_path)
+    local job = get_job_shortname(jobid)
+    local subjob = get_job_shortname(subjobid)
+    local profile_filename = get_profile_filename(jobid, subjobid)
+    
+    debugf('Creating empty profile: %s', profile_path)
+    
+    local file = io.open(profile_path, "w")
+    if not file then
+        errorf('Failed to create profile file: %s', profile_path)
+        return false
+    end
+    
+    -- Write header comment
+    file:write(string.format('# JobBinds Profile: %s/%s\n', job, subjob))
+    file:write('\n')
+    
+    file:close()
+    printf('Created empty profile: %s', profile_filename)
+    debugf('Empty profile created successfully at: %s', profile_path)
+    return true
+end
+
 -- Load new profile via /exec
 local function load_profile(jobid, subjobid)
     local profile_path = get_profile_path(jobid, subjobid)
     local profile_filename = get_profile_filename(jobid, subjobid)
     debugf('Attempting to load profile: %s', profile_path)
     
-    -- Ensure file exists
+    -- Ensure file exists, create empty one if it doesn't
     local file = io.open(profile_path, "r")
     if not file then
-        errorf('Profile %s not found.', profile_path)
+        printf('Profile %s not found, creating empty profile.', profile_filename)
         debugf('Profile file does not exist at: %s', profile_path)
-        return false
+        if not create_empty_profile(jobid, subjobid, profile_path) then
+            return false
+        end
+    else
+        file:close()
     end
-    file:close()
     debugf('Profile file exists, executing: %s', profile_filename)
     
     local ok = pcall(function()
