@@ -93,7 +93,7 @@ local function refresh_scripts_list()
     -- Helper function to check if file should be ignored
     local function is_ignored_file(filename)
         local lower = filename:lower();
-        return lower == 'default.txt' or lower == 'launcher.txt';
+        return lower == 'default.txt' or lower == 'launcher.txt' or lower == 'jobbinds.txt';
     end
     
     -- Use Lua's lfs library if available, otherwise use a simple file list
