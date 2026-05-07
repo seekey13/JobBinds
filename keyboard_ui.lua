@@ -573,10 +573,7 @@ local function render_binding_editor()
     -- Show prompt if no key is selected
     if keyboard_ui.binding_key[1] == '' then
         imgui.Spacing();
-        imgui.Spacing();
         imgui.Text('Click a button on the keyboard to apply a key binding');
-        imgui.Spacing();
-        imgui.Spacing();
         return
     end
     
@@ -595,6 +592,7 @@ local function render_binding_editor()
     show_shift = is_valid_shift
     
     -- Render the 4 binding rows with headers
+    imgui.Spacing();
     imgui.Text('Binding');
     imgui.SameLine();
     imgui.SetCursorPosX(135); -- Above the X button
@@ -645,8 +643,6 @@ local function render_binding_editor()
         imgui.Spacing();
     end
     
-    imgui.Spacing();
-    imgui.Separator();
     imgui.Spacing();
     
     -- Check if any macro bindings have invalid filename characters
@@ -708,7 +704,7 @@ local function render_binding_editor()
     
     -- Display current profile/job combination
     imgui.SameLine();
-    imgui.Dummy({ 116, 0 }); -- Move right 116px
+    imgui.Dummy({ 128, 0 }); -- Move right 116px
     imgui.SameLine();
     local profile_display = keyboard_ui.current_profile or 'No Profile Loaded';
     -- Convert WAR_NIN.txt format to WAR/NIN display
@@ -757,9 +753,6 @@ function keyboard_ui.render()
     if imgui.Begin('JobBinds', keyboard_ui.is_open, ImGuiWindowFlags_AlwaysAutoResize) then
         -- Virtual keyboard on top
         render_virtual_keyboard();
-        
-        -- Horizontal divider
-        imgui.Separator();
         
         -- Binding editor on bottom
         render_binding_editor();
