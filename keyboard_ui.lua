@@ -41,7 +41,7 @@ keyboard_ui.current_profile = 'No Profile Loaded';
 keyboard_ui.is_binding = false;
 keyboard_ui.debug_mode = false;
 keyboard_ui.error_message = '';
-keyboard_ui.all_jobs = { false };
+keyboard_ui.global = { false };
 
 -- Current bindings loaded from profile file
 local current_bindings = {};
@@ -704,7 +704,7 @@ local function render_binding_editor()
     end
     
     imgui.SameLine();
-    imgui.Checkbox('All Jobs', keyboard_ui.all_jobs);
+    imgui.Checkbox('Global', keyboard_ui.global);
     
     -- Display current profile/job combination
     imgui.SameLine();
