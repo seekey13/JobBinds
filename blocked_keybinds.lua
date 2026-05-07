@@ -64,8 +64,6 @@ M.blocked = {
     ['PAGEUP'] = true,
     ['PAGEDOWN'] = true,
     ['INSERT'] = true,
-    ['HOME'] = true,
-    ['END'] = true,
 }
 
 -- Keys that can be used alone or with Shift, but not with Ctrl or Alt
