@@ -340,11 +340,6 @@ local function save_current_binding()
     
     -- Helper function to save a single modifier combination
     local function save_modifier_binding(cmd_text, is_macro, macro_text, has_ctrl, has_alt, has_shift)
-        -- Skip if no command is set
-        if cmd_text == '' then
-            return true
-        end
-        
         local binding_data = {
             key = keyboard_ui.binding_key[1],
             command = cmd_text,
@@ -354,6 +349,17 @@ local function save_current_binding()
             alt_modifier = has_alt,
             ctrl_modifier = has_ctrl
         }
+        
+        -- If no command is set, delete the binding instead of saving
+        if cmd_text == '' then
+            local success, error_msg = ui_functions.delete_current_binding(binding_data, current_bindings, current_profile_path, keyboard_ui.debug_mode)
+            -- If no binding was found, that's okay (nothing to delete)
+            if not success and error_msg ~= 'No binding found for this key combination' then
+                last_error = error_msg
+                return false
+            end
+            return true
+        end
         
         local success, error_msg = ui_functions.save_current_binding(binding_data, current_bindings, current_profile_path, keyboard_ui.debug_mode)
         if not success then
