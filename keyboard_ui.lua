@@ -41,6 +41,7 @@ keyboard_ui.current_profile = 'No Profile Loaded';
 keyboard_ui.is_binding = false;
 keyboard_ui.debug_mode = false;
 keyboard_ui.error_message = '';
+keyboard_ui.all_jobs = { false };
 
 -- Current bindings loaded from profile file
 local current_bindings = {};
@@ -702,9 +703,12 @@ local function render_binding_editor()
         end
     end
     
+    imgui.SameLine();
+    imgui.Checkbox('All Jobs', keyboard_ui.all_jobs);
+    
     -- Display current profile/job combination
     imgui.SameLine();
-    imgui.Dummy({ 223, 0 }); -- Move right 223px
+    imgui.Dummy({ 143, 0 }); -- Move right 143px
     imgui.SameLine();
     local profile_display = keyboard_ui.current_profile or 'No Profile Loaded';
     -- Convert WAR_NIN.txt format to WAR/NIN display
