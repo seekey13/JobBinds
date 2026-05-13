@@ -64,8 +64,6 @@ M.blocked = {
     ['PAGEUP'] = true,
     ['PAGEDOWN'] = true,
     ['INSERT'] = true,
-    ['HOME'] = true,
-    ['END'] = true,
 }
 
 -- Keys that can be used alone or with Shift, but not with Ctrl or Alt
@@ -89,92 +87,50 @@ M.blocked_with_modifiers = {
     ['9'] = true,
 }
 
--- Consolidated list of all blocked keys for easy checking
-M.all_blocked = {}
-
--- Function to populate the consolidated list
-local function populate_all_blocked()
-    for key, _ in pairs(M.blocked) do
-        M.all_blocked[key:upper()] = true
-    end
-end
-
--- Function to check if a key is blocked
+-- Function to check if a key is fully blocked (any modifier combination).
 function M.is_key_blocked(key)
     if not key then return false end
-    return M.all_blocked[key:upper()] == true
+    return M.blocked[key:upper()] == true
 end
 
--- Function to check if a key combination is blocked
-function M.is_combination_blocked(key, modifiers)
+-- Function to check if a key combination is blocked.
+-- Returns: blocked (bool), reason (string|nil)
+function M.is_combination_blocked(key, modifiers_string)
     if not key then return false end
-    
+
     local base_key = key:upper()
-    
-    -- Check if base key is completely blocked
+
+    -- Fully blocked base key
     if M.is_key_blocked(base_key) then
         return true, string.format("Key '%s' is protected and cannot be rebound", base_key)
     end
-    
-    -- Check for restricted modifier combinations
-    if M.blocked_with_modifiers[base_key] and modifiers then
-        local mod_string = modifiers:upper()
-        
-        -- Block Ctrl combinations for restricted keys
+
+    local mod_string = modifiers_string and modifiers_string:upper() or ''
+
+    -- Restricted modifier combinations for certain keys
+    if M.blocked_with_modifiers[base_key] then
         if mod_string:find('CTRL') then
-            return true, string.format("'%s' cannot be used with Ctrl modifier", base_key)
+            return true, string.format("'%s' cannot be used with Ctrl modifier (use alone or with Shift)", base_key)
         end
-        
-        -- Block Alt combinations for restricted keys
         if mod_string:find('ALT') then
-            return true, string.format("'%s' cannot be used with Alt modifier", base_key)
+            return true, string.format("'%s' cannot be used with Alt modifier (use alone or with Shift)", base_key)
         end
     end
-    
-    -- Special cases for certain combinations that should always be blocked
-    if modifiers then
-        local mod_string = modifiers:upper()
-        
-        -- Block Alt+F4 (close application)
+
+    -- Special always-blocked combinations
+    if mod_string ~= '' then
         if base_key == 'F4' and mod_string:find('ALT') then
             return true, "Alt+F4 is protected (closes application)"
         end
-        
-        -- Block Ctrl+Alt+Delete equivalent combinations
-        if mod_string:find('CTRL') and mod_string:find('ALT') and base_key == 'DELETE' then
+        if base_key == 'DELETE' and mod_string:find('CTRL') and mod_string:find('ALT') then
             return true, "Ctrl+Alt+Delete combination is protected"
         end
-        
-        -- Block Windows key combinations
         if mod_string:find('WIN') then
             return true, "Windows key combinations are protected"
         end
     end
-    
+
     return false, nil
 end
-
--- Function to get a user-friendly error message for blocked keys
-function M.get_block_reason(key, modifiers)
-    if not key then return nil end
-    
-    local base_key = key:upper()
-    
-    -- Check for restricted modifier combinations first
-    if M.blocked_with_modifiers[base_key] and modifiers then
-        local mod_string = modifiers:upper()
-        if mod_string:find('CTRL') then
-            return string.format("'%s' cannot be used with Ctrl modifier (use alone or with Shift)", base_key)
-        elseif mod_string:find('ALT') then
-            return string.format("'%s' cannot be used with Alt modifier (use alone or with Shift)", base_key)
-        end
-    end
-    
-    -- Default message for completely blocked keys
-    return string.format("Key '%s' is protected and cannot be rebound", base_key)
-end
-
--- Initialize the consolidated list
-populate_all_blocked()
 
 return M

@@ -13,30 +13,22 @@ addon.desc      = 'Automatically loads keybind profile scripts based on current 
 addon.link      = 'https://github.com/seekey13/jobbinds';
 
 require('common');
-local chat = require('chat')
-local keyboard_ui = require('keyboard_ui');
-local blocked_keybinds = require('blocked_keybinds');
+local log = require('lib.log');
+local keyboard_ui = require('lib.keyboard_ui');
+local blocked_keybinds = require('lib.blocked_keybinds');
+
+log.set_addon_name(addon.name)
+local printf = log.printf
+local errorf = log.errorf
+local debugf = log.debugf
 
 -- Use the blocked_keybinds module for consistency
 local KEY_BLACKLIST = blocked_keybinds.blocked;
-
--- Custom print functions for categorized output.
-local function printf(fmt, ...)  print(chat.header(addon.name) .. chat.message(fmt:format(...))) end
-local function warnf(fmt, ...)   print(chat.header(addon.name) .. chat.warning(fmt:format(...))) end
-local function errorf(fmt, ...)  print(chat.header(addon.name) .. chat.error  (fmt:format(...))) end
-local function debugf(fmt, ...) 
-    if debug_mode then
-        print(chat.header(addon.name) .. chat.message('[DEBUG] ' .. fmt:format(...))) 
-    end
-end
 
 -- Holds the last loaded job/subjob profile info
 local last_job = nil
 local last_subjob = nil
 local last_profile_keys = {}
-
--- Debug mode flag (off by default)
-local debug_mode = false
 
 -- Helper: Get current job and subjob
 local function get_current_jobs()
@@ -133,27 +125,69 @@ local function update_keyboard_ui(profile_filename, profile_path)
     keyboard_ui.load_profile(profile_path)
 end
 
+-- Helper: Create an empty profile file for a job combination
+local function create_empty_profile(jobid, subjobid, profile_path)
+    local job = get_job_shortname(jobid)
+    local subjob = get_job_shortname(subjobid)
+    local profile_filename = get_profile_filename(jobid, subjobid)
+    
+    debugf('Creating empty profile: %s', profile_path)
+    
+    local file = io.open(profile_path, "w")
+    if not file then
+        errorf('Failed to create profile file: %s', profile_path)
+        return false
+    end
+    
+    -- Write header comment
+    file:write(string.format('# JobBinds Profile: %s/%s\n', job, subjob))
+    file:write('\n')
+    
+    file:close()
+    printf('Created empty profile: %s', profile_filename)
+    debugf('Empty profile created successfully at: %s', profile_path)
+    return true
+end
+
 -- Load new profile via /exec
 local function load_profile(jobid, subjobid)
     local profile_path = get_profile_path(jobid, subjobid)
     local profile_filename = get_profile_filename(jobid, subjobid)
     debugf('Attempting to load profile: %s', profile_path)
     
-    -- Ensure file exists
+    -- Ensure job profile file exists, create empty one if it doesn't
     local file = io.open(profile_path, "r")
     if not file then
-        errorf('Profile %s not found.', profile_path)
+        printf('Profile %s not found, creating empty profile.', profile_filename)
         debugf('Profile file does not exist at: %s', profile_path)
-        return false
+        if not create_empty_profile(jobid, subjobid, profile_path) then
+            return false
+        end
+    else
+        file:close()
     end
-    file:close()
     debugf('Profile file exists, executing: %s', profile_filename)
     
+    -- Load job-specific profile first
     local ok = pcall(function()
         AshitaCore:GetChatManager():QueueCommand(-1, string.format('/exec %s', profile_filename))
     end)
     if ok then
         printf('Loaded jobbinds profile: %s', profile_filename)
+        
+        -- Then load global bindings (JobBinds.txt) to override job-specific ones
+        local global_path = string.format('%s/scripts/JobBinds.txt', AshitaCore:GetInstallPath())
+        local global_file = io.open(global_path, "r")
+        if global_file then
+            global_file:close()
+            debugf('Loading global bindings from JobBinds.txt (overriding job-specific)')
+            pcall(function()
+                AshitaCore:GetChatManager():QueueCommand(-1, '/exec JobBinds.txt')
+            end)
+        else
+            debugf('No global bindings file found at: %s', global_path)
+        end
+        
         -- Update the keyboard UI with the current profile
         update_keyboard_ui(profile_filename, profile_path)
         debugf('Successfully loaded and updated UI with profile: %s', profile_filename)
@@ -241,10 +275,11 @@ ashita.events.register('command', 'jobbinds_command', function(e)
         printf('Opening JobBinds keyboard interface.')
     elseif #args == 2 and args[2]:lower() == 'debug' then
         -- Toggle debug mode
-        debug_mode = not debug_mode
-        keyboard_ui.set_debug_mode(debug_mode)  -- Update keyboard UI debug mode
-        printf('Debug mode %s.', debug_mode and 'enabled' or 'disabled')
-        if debug_mode then
+        local new_state = not log.is_debug()
+        log.set_debug(new_state)
+        keyboard_ui.set_debug_mode(new_state)  -- Update keyboard UI debug mode
+        printf('Debug mode %s.', new_state and 'enabled' or 'disabled')
+        if new_state then
             debugf('Debug information will now be displayed.')
             debugf('Current state: last_job=%s, last_subjob=%s', 
                    get_safe_job_name(last_job),
