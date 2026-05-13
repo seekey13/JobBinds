@@ -5,9 +5,9 @@
 --]]
 
 require('common');
-local blocked_keybinds = require('blocked_keybinds');
-local modifiers = require('modifiers');
-local log = require('log');
+local blocked_keybinds = require('lib.blocked_keybinds');
+local modifiers = require('lib.modifiers');
+local log = require('lib.log');
 
 local ui_functions = {};
 

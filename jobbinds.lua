@@ -13,9 +13,9 @@ addon.desc      = 'Automatically loads keybind profile scripts based on current 
 addon.link      = 'https://github.com/seekey13/jobbinds';
 
 require('common');
-local log = require('log');
-local keyboard_ui = require('keyboard_ui');
-local blocked_keybinds = require('blocked_keybinds');
+local log = require('lib.log');
+local keyboard_ui = require('lib.keyboard_ui');
+local blocked_keybinds = require('lib.blocked_keybinds');
 
 log.set_addon_name(addon.name)
 local printf = log.printf

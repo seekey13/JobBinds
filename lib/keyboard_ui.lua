@@ -1,9 +1,9 @@
 require('common');
 local imgui = require('imgui');
-local vk_codes = require('vk_codes');
-local blocked_keybinds = require('blocked_keybinds');
-local ui_functions = require('ui_functions');
-local log = require('log');
+local vk_codes = require('lib.vk_codes');
+local blocked_keybinds = require('lib.blocked_keybinds');
+local ui_functions = require('lib.ui_functions');
+local log = require('lib.log');
 
 local printf = log.printf
 local errorf = log.errorf
