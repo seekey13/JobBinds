@@ -13,30 +13,22 @@ addon.desc      = 'Automatically loads keybind profile scripts based on current 
 addon.link      = 'https://github.com/seekey13/jobbinds';
 
 require('common');
-local chat = require('chat')
+local log = require('log');
 local keyboard_ui = require('keyboard_ui');
 local blocked_keybinds = require('blocked_keybinds');
 
+log.set_addon_name(addon.name)
+local printf = log.printf
+local errorf = log.errorf
+local debugf = log.debugf
+
 -- Use the blocked_keybinds module for consistency
 local KEY_BLACKLIST = blocked_keybinds.blocked;
-
--- Custom print functions for categorized output.
-local function printf(fmt, ...)  print(chat.header(addon.name) .. chat.message(fmt:format(...))) end
-local function warnf(fmt, ...)   print(chat.header(addon.name) .. chat.warning(fmt:format(...))) end
-local function errorf(fmt, ...)  print(chat.header(addon.name) .. chat.error  (fmt:format(...))) end
-local function debugf(fmt, ...) 
-    if debug_mode then
-        print(chat.header(addon.name) .. chat.message('[DEBUG] ' .. fmt:format(...))) 
-    end
-end
 
 -- Holds the last loaded job/subjob profile info
 local last_job = nil
 local last_subjob = nil
 local last_profile_keys = {}
-
--- Debug mode flag (off by default)
-local debug_mode = false
 
 -- Helper: Get current job and subjob
 local function get_current_jobs()
@@ -283,10 +275,11 @@ ashita.events.register('command', 'jobbinds_command', function(e)
         printf('Opening JobBinds keyboard interface.')
     elseif #args == 2 and args[2]:lower() == 'debug' then
         -- Toggle debug mode
-        debug_mode = not debug_mode
-        keyboard_ui.set_debug_mode(debug_mode)  -- Update keyboard UI debug mode
-        printf('Debug mode %s.', debug_mode and 'enabled' or 'disabled')
-        if debug_mode then
+        local new_state = not log.is_debug()
+        log.set_debug(new_state)
+        keyboard_ui.set_debug_mode(new_state)  -- Update keyboard UI debug mode
+        printf('Debug mode %s.', new_state and 'enabled' or 'disabled')
+        if new_state then
             debugf('Debug information will now be displayed.')
             debugf('Current state: last_job=%s, last_subjob=%s', 
                    get_safe_job_name(last_job),

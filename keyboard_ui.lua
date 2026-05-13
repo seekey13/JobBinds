@@ -1,13 +1,12 @@
 require('common');
-local chat = require('chat');
 local imgui = require('imgui');
 local vk_codes = require('vk_codes');
 local blocked_keybinds = require('blocked_keybinds');
 local ui_functions = require('ui_functions');
+local log = require('log');
 
--- Custom print functions
-local function printf(fmt, ...) print(chat.header('JobBinds') .. chat.message(fmt:format(...))) end
-local function errorf(fmt, ...) print(chat.header('JobBinds') .. chat.error(fmt:format(...))) end
+local printf = log.printf
+local errorf = log.errorf
 
 -- UI state variables
 local keyboard_ui = {};
@@ -39,7 +38,6 @@ keyboard_ui.last_scripts_refresh = 0;
 
 keyboard_ui.current_profile = 'No Profile Loaded';
 keyboard_ui.is_binding = false;
-keyboard_ui.debug_mode = false;
 keyboard_ui.error_message = '';
 keyboard_ui.global = { false };
 
@@ -80,7 +78,7 @@ end
 local function load_global_bindings()
     ensure_global_bindings_file();
     local global_path = get_global_bindings_path();
-    local bindings = ui_functions.load_bindings_from_profile(global_path, keyboard_ui.debug_mode);
+    local bindings = ui_functions.load_bindings_from_profile(global_path);
     
     -- Mark all bindings as global
     for _, binding in ipairs(bindings) do
@@ -505,7 +503,7 @@ local function save_current_binding()
         
         -- If no command is set, delete the binding instead of saving
         if cmd_text == '' then
-            local success, error_msg = ui_functions.delete_current_binding(binding_data, target_bindings, target_profile_path, keyboard_ui.debug_mode)
+            local success, error_msg = ui_functions.delete_current_binding(binding_data, target_bindings, target_profile_path)
             -- If no binding was found, that's okay (nothing to delete)
             if not success and error_msg ~= 'No binding found for this key combination' then
                 last_error = error_msg
@@ -514,7 +512,7 @@ local function save_current_binding()
             return true
         end
         
-        local success, error_msg = ui_functions.save_current_binding(binding_data, target_bindings, target_profile_path, keyboard_ui.debug_mode)
+        local success, error_msg = ui_functions.save_current_binding(binding_data, target_bindings, target_profile_path)
         if not success then
             last_error = error_msg
             return false
@@ -597,7 +595,7 @@ local function delete_current_binding()
             is_global = keyboard_ui.global[1]
         }
         
-        local success, error_msg = ui_functions.delete_current_binding(binding_data, target_bindings, target_profile_path, keyboard_ui.debug_mode)
+        local success, error_msg = ui_functions.delete_current_binding(binding_data, target_bindings, target_profile_path)
         if not success then
             last_error = error_msg
             return false
@@ -908,15 +906,11 @@ local function render_binding_editor()
                 if vk_codes.is_known_key(key_code) then
                     keyboard_ui.binding_key[1] = key_name;
                     keyboard_ui.is_binding = false;
-                    if keyboard_ui.debug_mode then
-                        printf('[DEBUG] Detected key: %s (code: %d)', key_name, key_code);
-                    end
+                    log.debugf('Detected key: %s (code: %d)', key_name, key_code);
                 else
                     keyboard_ui.binding_key[1] = 'KEY_' .. key_code;
                     keyboard_ui.is_binding = false;
-                    if keyboard_ui.debug_mode then
-                        printf('[DEBUG] Detected unknown key code: %d', key_code);
-                    end
+                    log.debugf('Detected unknown key code: %d', key_code);
                 end
                 break;
             end
@@ -924,9 +918,7 @@ local function render_binding_editor()
         local ok, is_pressed = pcall(function() return imgui.IsKeyPressed(27) end)
         if ok and is_pressed then
             keyboard_ui.is_binding = false;
-            if keyboard_ui.debug_mode then
-                printf('[DEBUG] Escape pressed, canceling binding');
-            end
+            log.debugf('Escape pressed, canceling binding');
         end
     end
 end
@@ -970,7 +962,7 @@ end
 
 function keyboard_ui.load_profile(profile_path)
     -- Load job-specific bindings
-    current_bindings = ui_functions.load_bindings_from_profile(profile_path, keyboard_ui.debug_mode);
+    current_bindings = ui_functions.load_bindings_from_profile(profile_path);
     
     -- Ensure job-specific bindings are NOT marked as global
     for _, binding in ipairs(current_bindings) do
@@ -987,14 +979,14 @@ function keyboard_ui.load_profile(profile_path)
     combined_bindings = merge_bindings();
     
     -- Debug: Count global vs total bindings
-    if keyboard_ui.debug_mode then
+    if log.is_debug() then
         local global_count = 0;
         for _, binding in ipairs(combined_bindings) do
             if binding.is_global then
                 global_count = global_count + 1;
             end
         end
-        printf('[DEBUG] Bindings loaded - Total: %d, Global: %d, Job-specific: %d', 
+        log.debugf('Bindings loaded - Total: %d, Global: %d, Job-specific: %d', 
                #combined_bindings, global_count, #combined_bindings - global_count);
     end
 end
@@ -1013,7 +1005,7 @@ function keyboard_ui.load_bindings(bindings)
 end
 
 function keyboard_ui.set_debug_mode(enabled)
-    keyboard_ui.debug_mode = enabled;
+    log.set_debug(enabled);
 end
 
 -- Get global bindings path (for external access)
