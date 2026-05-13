@@ -50,6 +50,84 @@ local combined_bindings = {}; -- Merged bindings (global overrides job-specific)
 local current_profile_path = nil;
 local global_profile_path = nil;
 
+-- ============================================================================
+-- GLOBAL BINDINGS HELPER FUNCTIONS (Must be defined early for use in render functions)
+-- ============================================================================
+
+-- Helper: Get path to global bindings file (JobBinds.txt)
+local function get_global_bindings_path()
+    return string.format('%s/scripts/JobBinds.txt', AshitaCore:GetInstallPath());
+end
+
+-- Helper: Ensure global bindings file exists
+local function ensure_global_bindings_file()
+    local global_path = get_global_bindings_path();
+    local file = io.open(global_path, 'r');
+    if not file then
+        -- Create empty global bindings file
+        file = io.open(global_path, 'w');
+        if file then
+            file:write('# JobBinds Global Bindings\n');
+            file:write('\n');
+            file:close();
+        end
+    else
+        file:close();
+    end
+end
+
+-- Helper: Load global bindings from JobBinds.txt
+local function load_global_bindings()
+    ensure_global_bindings_file();
+    local global_path = get_global_bindings_path();
+    local bindings = ui_functions.load_bindings_from_profile(global_path, keyboard_ui.debug_mode);
+    
+    -- Mark all bindings as global
+    for _, binding in ipairs(bindings) do
+        binding.is_global = true;
+    end
+    
+    return bindings;
+end
+
+-- Helper: Check if any global binding exists on a key (any modifier combination)
+local function has_global_binding_on_key(key)
+    for _, binding in ipairs(global_bindings) do
+        if binding.key:upper() == key:upper() then
+            return true;
+        end
+    end
+    return false;
+end
+
+-- Helper: Merge global and job-specific bindings (global overrides job-specific)
+local function merge_bindings()
+    local merged = {};
+    local added_keys = {}; -- Track key+modifier combinations
+    
+    -- Add global bindings first (they take precedence)
+    for _, binding in ipairs(global_bindings) do
+        local key_id = binding.key:upper() .. '|' .. (binding.modifiers or '');
+        merged[#merged + 1] = binding;
+        added_keys[key_id] = true;
+    end
+    
+    -- Add job-specific bindings that don't conflict with global
+    for _, binding in ipairs(current_bindings) do
+        local key_id = binding.key:upper() .. '|' .. (binding.modifiers or '');
+        if not added_keys[key_id] then
+            merged[#merged + 1] = binding;
+            added_keys[key_id] = true;
+        end
+    end
+    
+    return merged;
+end
+
+-- ============================================================================
+-- KEYBOARD LAYOUT AND UI FUNCTIONS
+-- ============================================================================
+
 -- Virtual keyboard layout definition
 local keyboard_layout = {
     -- Row 1: Number row
@@ -840,76 +918,6 @@ end
 
 function keyboard_ui.toggle()
     keyboard_ui.is_open[1] = not keyboard_ui.is_open[1];
-end
-
--- Helper: Get path to global bindings file (JobBinds.txt)
-local function get_global_bindings_path()
-    return string.format('%s/scripts/JobBinds.txt', AshitaCore:GetInstallPath());
-end
-
--- Helper: Ensure global bindings file exists
-local function ensure_global_bindings_file()
-    local global_path = get_global_bindings_path();
-    local file = io.open(global_path, 'r');
-    if not file then
-        -- Create empty global bindings file
-        file = io.open(global_path, 'w');
-        if file then
-            file:write('# JobBinds Global Bindings\n');
-            file:write('\n');
-            file:close();
-        end
-    else
-        file:close();
-    end
-end
-
--- Helper: Load global bindings from JobBinds.txt
-local function load_global_bindings()
-    ensure_global_bindings_file();
-    local global_path = get_global_bindings_path();
-    local bindings = ui_functions.load_bindings_from_profile(global_path, keyboard_ui.debug_mode);
-    
-    -- Mark all bindings as global
-    for _, binding in ipairs(bindings) do
-        binding.is_global = true;
-    end
-    
-    return bindings;
-end
-
--- Helper: Check if any global binding exists on a key (any modifier combination)
-local function has_global_binding_on_key(key)
-    for _, binding in ipairs(global_bindings) do
-        if binding.key:upper() == key:upper() then
-            return true;
-        end
-    end
-    return false;
-end
-
--- Helper: Merge global and job-specific bindings (global overrides job-specific)
-local function merge_bindings()
-    local merged = {};
-    local added_keys = {}; -- Track key+modifier combinations
-    
-    -- Add global bindings first (they take precedence)
-    for _, binding in ipairs(global_bindings) do
-        local key_id = binding.key:upper() .. '|' .. (binding.modifiers or '');
-        merged[#merged + 1] = binding;
-        added_keys[key_id] = true;
-    end
-    
-    -- Add job-specific bindings that don't conflict with global
-    for _, binding in ipairs(current_bindings) do
-        local key_id = binding.key:upper() .. '|' .. (binding.modifiers or '');
-        if not added_keys[key_id] then
-            merged[#merged + 1] = binding;
-            added_keys[key_id] = true;
-        end
-    end
-    
-    return merged;
 end
 
 function keyboard_ui.set_current_profile(profile_name)
