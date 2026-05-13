@@ -43,9 +43,12 @@ keyboard_ui.debug_mode = false;
 keyboard_ui.error_message = '';
 keyboard_ui.global = { false };
 
--- Current bindings loaded from profile file
-local current_bindings = {};
+-- Current bindings loaded from profile files
+local current_bindings = {};  -- Job-specific bindings
+local global_bindings = {};   -- Global bindings from JobBinds.txt
+local combined_bindings = {}; -- Merged bindings (global overrides job-specific)
 local current_profile_path = nil;
+local global_profile_path = nil;
 
 -- Virtual keyboard layout definition
 local keyboard_layout = {
@@ -141,11 +144,16 @@ local function render_key_button(key, width)
     -- Check if this key is blocked
     local is_blocked = blocked_keybinds.blocked[key:upper()] or false
     
-    -- Check if this key is bound
+    -- Check if this key is bound (check combined bindings)
     local is_bound = false
-    for _, binding in ipairs(current_bindings) do
+    local is_global_bound = false
+    for _, binding in ipairs(combined_bindings) do
         if binding.key:upper() == key:upper() then
             is_bound = true
+            -- Check if this is a global binding
+            if binding.is_global then
+                is_global_bound = true
+            end
             break
         end
     end
@@ -154,7 +162,7 @@ local function render_key_button(key, width)
     local push_colors = false
     local push_alpha = false
     
-    -- Style the button based on status: blocked > selected > bound > normal
+    -- Style the button based on status: blocked > selected > global > bound > normal
     if is_blocked then
         -- Blocked keys: dark red/disabled appearance
         imgui.PushStyleColor(ImGuiCol_Button, { 0.4, 0.1, 0.1, 0.6 });
@@ -168,6 +176,12 @@ local function render_key_button(key, width)
         imgui.PushStyleColor(ImGuiCol_Button, { 0.1, 0.6, 0.1, 1.0 });
         imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.15, 0.7, 0.15, 1.0 });
         imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.08, 0.5, 0.08, 1.0 });
+        push_colors = true
+    elseif is_global_bound then
+        -- Global bound keys: blue
+        imgui.PushStyleColor(ImGuiCol_Button, { 0.1, 0.3, 0.7, 1.0 });
+        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.15, 0.4, 0.8, 1.0 });
+        imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.08, 0.25, 0.6, 1.0 });
         push_colors = true
     elseif is_bound then
         -- Bound keys: default ImGui styling (standard button color)
@@ -193,10 +207,11 @@ local function render_key_button(key, width)
     -- Show tooltip on hover if key has bindings
     if is_bound and imgui.IsItemHovered() then
         local tooltip_lines = {};
-        for _, binding in ipairs(current_bindings) do
+        for _, binding in ipairs(combined_bindings) do
             if binding.key:upper() == key:upper() then
                 local modifier_text = binding.modifiers ~= '' and (binding.modifiers .. ' + ') or '';
-                table.insert(tooltip_lines, modifier_text .. binding.key .. ': ' .. binding.command);
+                local global_marker = binding.is_global and ' [GLOBAL]' or '';
+                table.insert(tooltip_lines, modifier_text .. binding.key .. ': ' .. binding.command .. global_marker);
             end
         end
         if #tooltip_lines > 0 then
@@ -213,9 +228,9 @@ local function render_key_button(key, width)
         local function load_modifier_binding(has_ctrl, has_alt, has_shift)
             local cmd_text, is_macro, macro_text
             
-            -- Find existing binding for this key+modifier combination
+            -- Find existing binding for this key+modifier combination (check combined bindings)
             local existing_binding = nil
-            for _, binding in ipairs(current_bindings) do
+            for _, binding in ipairs(combined_bindings) do
                 if binding.key:upper() == key:upper() then
                     local modifiers = binding.modifiers or ''
                     local bind_has_ctrl = modifiers:find('Ctrl') ~= nil
@@ -297,6 +312,9 @@ local function render_key_button(key, width)
             keyboard_ui.macro_text_shift[1] = ''
         end
         
+        -- Set Global checkbox based on whether key has any global bindings
+        keyboard_ui.global[1] = has_global_binding_on_key(key:upper());
+        
         clicked = true
     end
     
@@ -336,8 +354,19 @@ local function save_current_binding()
         return false
     end
     
+    -- Check if trying to save job-specific binding on a key with global bindings
+    if not keyboard_ui.global[1] and has_global_binding_on_key(keyboard_ui.binding_key[1]) then
+        keyboard_ui.error_message = 'Cannot create job-specific binding: Key has global binding(s)';
+        errorf('Cannot create job-specific binding on %s: Key has global binding(s)', keyboard_ui.binding_key[1]);
+        return false;
+    end
+    
     local all_success = true
     local last_error = ''
+    
+    -- Determine which profile path and binding array to use
+    local target_profile_path = keyboard_ui.global[1] and global_profile_path or current_profile_path;
+    local target_bindings = keyboard_ui.global[1] and global_bindings or current_bindings;
     
     -- Helper function to save a single modifier combination
     local function save_modifier_binding(cmd_text, is_macro, macro_text, has_ctrl, has_alt, has_shift)
@@ -348,12 +377,13 @@ local function save_current_binding()
             macro_text = macro_text,
             shift_modifier = has_shift,
             alt_modifier = has_alt,
-            ctrl_modifier = has_ctrl
+            ctrl_modifier = has_ctrl,
+            is_global = keyboard_ui.global[1]
         }
         
         -- If no command is set, delete the binding instead of saving
         if cmd_text == '' then
-            local success, error_msg = ui_functions.delete_current_binding(binding_data, current_bindings, current_profile_path, keyboard_ui.debug_mode)
+            local success, error_msg = ui_functions.delete_current_binding(binding_data, target_bindings, target_profile_path, keyboard_ui.debug_mode)
             -- If no binding was found, that's okay (nothing to delete)
             if not success and error_msg ~= 'No binding found for this key combination' then
                 last_error = error_msg
@@ -362,7 +392,7 @@ local function save_current_binding()
             return true
         end
         
-        local success, error_msg = ui_functions.save_current_binding(binding_data, current_bindings, current_profile_path, keyboard_ui.debug_mode)
+        local success, error_msg = ui_functions.save_current_binding(binding_data, target_bindings, target_profile_path, keyboard_ui.debug_mode)
         if not success then
             last_error = error_msg
             return false
@@ -407,6 +437,16 @@ local function save_current_binding()
         return false
     end
     
+    -- Update the appropriate binding array
+    if keyboard_ui.global[1] then
+        global_bindings = target_bindings;
+    else
+        current_bindings = target_bindings;
+    end
+    
+    -- Re-merge bindings
+    combined_bindings = merge_bindings();
+    
     keyboard_ui.error_message = ''
     return true
 end
@@ -421,16 +461,21 @@ local function delete_current_binding()
     local all_success = true
     local last_error = ''
     
+    -- Determine which profile path and binding array to use
+    local target_profile_path = keyboard_ui.global[1] and global_profile_path or current_profile_path;
+    local target_bindings = keyboard_ui.global[1] and global_bindings or current_bindings;
+    
     -- Helper function to delete a single modifier combination
     local function delete_modifier_binding(has_ctrl, has_alt, has_shift)
         local binding_data = {
             key = keyboard_ui.binding_key[1],
             shift_modifier = has_shift,
             alt_modifier = has_alt,
-            ctrl_modifier = has_ctrl
+            ctrl_modifier = has_ctrl,
+            is_global = keyboard_ui.global[1]
         }
         
-        local success, error_msg = ui_functions.delete_current_binding(binding_data, current_bindings, current_profile_path, keyboard_ui.debug_mode)
+        local success, error_msg = ui_functions.delete_current_binding(binding_data, target_bindings, target_profile_path, keyboard_ui.debug_mode)
         if not success then
             last_error = error_msg
             return false
@@ -443,6 +488,16 @@ local function delete_current_binding()
     delete_modifier_binding(true, false, false)
     delete_modifier_binding(false, true, false)
     delete_modifier_binding(false, false, true)
+    
+    -- Update the appropriate binding array
+    if keyboard_ui.global[1] then
+        global_bindings = target_bindings;
+    else
+        current_bindings = target_bindings;
+    end
+    
+    -- Re-merge bindings
+    combined_bindings = merge_bindings();
     
     -- Clear UI
     keyboard_ui.binding_key[1] = ''
@@ -701,6 +756,9 @@ local function render_binding_editor()
     
     imgui.SameLine();
     imgui.Checkbox('Global', keyboard_ui.global);
+    if imgui.IsItemHovered() then
+        imgui.SetTooltip('Save binding to JobBinds.txt (global across all jobs).\nGlobal bindings override job-specific bindings.\nKeys with global bindings cannot have job-specific bindings.');
+    end
     
     -- Display current profile/job combination
     imgui.SameLine();
@@ -710,6 +768,14 @@ local function render_binding_editor()
     -- Convert WAR_NIN.txt format to WAR/NIN display
     profile_display = profile_display:gsub('%.txt$', ''):gsub('_', '/');
     imgui.Text(profile_display);
+    
+    -- Display error message if present
+    if keyboard_ui.error_message ~= '' then
+        imgui.Spacing();
+        imgui.PushStyleColor(ImGuiCol_Text, { 1.0, 0.3, 0.3, 1.0 });
+        imgui.Text(keyboard_ui.error_message);
+        imgui.PopStyleColor();
+    end
     
     -- Key binding detection (simplified for demo)
     if keyboard_ui.is_binding then
@@ -776,21 +842,112 @@ function keyboard_ui.toggle()
     keyboard_ui.is_open[1] = not keyboard_ui.is_open[1];
 end
 
+-- Helper: Get path to global bindings file (JobBinds.txt)
+local function get_global_bindings_path()
+    return string.format('%s/scripts/JobBinds.txt', AshitaCore:GetInstallPath());
+end
+
+-- Helper: Ensure global bindings file exists
+local function ensure_global_bindings_file()
+    local global_path = get_global_bindings_path();
+    local file = io.open(global_path, 'r');
+    if not file then
+        -- Create empty global bindings file
+        file = io.open(global_path, 'w');
+        if file then
+            file:write('# JobBinds Global Bindings\n');
+            file:write('\n');
+            file:close();
+        end
+    else
+        file:close();
+    end
+end
+
+-- Helper: Load global bindings from JobBinds.txt
+local function load_global_bindings()
+    ensure_global_bindings_file();
+    local global_path = get_global_bindings_path();
+    local bindings = ui_functions.load_bindings_from_profile(global_path, keyboard_ui.debug_mode);
+    
+    -- Mark all bindings as global
+    for _, binding in ipairs(bindings) do
+        binding.is_global = true;
+    end
+    
+    return bindings;
+end
+
+-- Helper: Check if any global binding exists on a key (any modifier combination)
+local function has_global_binding_on_key(key)
+    for _, binding in ipairs(global_bindings) do
+        if binding.key:upper() == key:upper() then
+            return true;
+        end
+    end
+    return false;
+end
+
+-- Helper: Merge global and job-specific bindings (global overrides job-specific)
+local function merge_bindings()
+    local merged = {};
+    local added_keys = {}; -- Track key+modifier combinations
+    
+    -- Add global bindings first (they take precedence)
+    for _, binding in ipairs(global_bindings) do
+        local key_id = binding.key:upper() .. '|' .. (binding.modifiers or '');
+        merged[#merged + 1] = binding;
+        added_keys[key_id] = true;
+    end
+    
+    -- Add job-specific bindings that don't conflict with global
+    for _, binding in ipairs(current_bindings) do
+        local key_id = binding.key:upper() .. '|' .. (binding.modifiers or '');
+        if not added_keys[key_id] then
+            merged[#merged + 1] = binding;
+            added_keys[key_id] = true;
+        end
+    end
+    
+    return merged;
+end
+
 function keyboard_ui.set_current_profile(profile_name)
     keyboard_ui.current_profile = profile_name or 'No Profile Loaded';
 end
 
 function keyboard_ui.load_profile(profile_path)
+    -- Load job-specific bindings
     current_bindings = ui_functions.load_bindings_from_profile(profile_path, keyboard_ui.debug_mode);
     current_profile_path = profile_path;
+    
+    -- Load global bindings
+    global_bindings = load_global_bindings();
+    global_profile_path = get_global_bindings_path();
+    
+    -- Merge bindings (global overrides job-specific)
+    combined_bindings = merge_bindings();
 end
 
 function keyboard_ui.load_bindings(bindings)
     current_bindings = bindings or {};
+    -- Also reload global bindings and merge
+    global_bindings = load_global_bindings();
+    combined_bindings = merge_bindings();
 end
 
 function keyboard_ui.set_debug_mode(enabled)
     keyboard_ui.debug_mode = enabled;
+end
+
+-- Get global bindings path (for external access)
+function keyboard_ui.get_global_bindings_path()
+    return get_global_bindings_path();
+end
+
+-- Check if key has global binding (for external access)
+function keyboard_ui.has_global_binding_on_key(key)
+    return has_global_binding_on_key(key);
 end
 
 return keyboard_ui;

@@ -97,6 +97,28 @@ Access the keyboard interface with `/jb` or `/jobbinds`:
   - `!` = Alt  
   - `+` = Shift
 
+### Global Bindings
+
+JobBinds now supports **Global Bindings** - keybinds that are active across all jobs and override job-specific bindings.
+
+- **File:** `Ashita/scripts/JobBinds.txt`
+- **Visual Indicator:** Global bindings appear in **blue** on the keyboard interface
+- **Priority:** Global bindings always override job-specific bindings
+- **Restriction:** Keys with global bindings **cannot** have job-specific bindings (including modifiers)
+  - Example: If `M` has a global binding, you cannot create a job-specific binding for `M`, `Shift+M`, `Ctrl+M`, or `Alt+M`
+  - However, you **can** create additional **global** bindings on that key (e.g., `Shift+M` as global)
+- **Usage:** 
+  1. Click a key in the interface
+  2. Check the **Global** checkbox
+  3. Configure the binding
+  4. Click **Save** - the binding will be saved to `JobBinds.txt`
+- **Auto-Load:** Global bindings are automatically loaded after job-specific bindings when you change jobs, ensuring they take precedence
+
+**Example Use Cases:**
+- Map key (`/bind M /map`) - useful on all jobs
+- Menu toggles - consistent across all characters
+- Common macros - shared functionality
+
 ### Blocked Keys
 
 Essential game keys are protected from being bound:

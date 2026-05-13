@@ -385,7 +385,8 @@ function ui_functions.save_current_binding(binding_data, current_bindings, curre
         key = binding_data.key,
         modifiers = modifier_string,
         command = binding_data.command,
-        is_macro = binding_data.is_macro
+        is_macro = binding_data.is_macro,
+        is_global = binding_data.is_global or false
     }
     
     -- Handle macro

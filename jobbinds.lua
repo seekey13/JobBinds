@@ -163,7 +163,7 @@ local function load_profile(jobid, subjobid)
     local profile_filename = get_profile_filename(jobid, subjobid)
     debugf('Attempting to load profile: %s', profile_path)
     
-    -- Ensure file exists, create empty one if it doesn't
+    -- Ensure job profile file exists, create empty one if it doesn't
     local file = io.open(profile_path, "r")
     if not file then
         printf('Profile %s not found, creating empty profile.', profile_filename)
@@ -176,11 +176,26 @@ local function load_profile(jobid, subjobid)
     end
     debugf('Profile file exists, executing: %s', profile_filename)
     
+    -- Load job-specific profile first
     local ok = pcall(function()
         AshitaCore:GetChatManager():QueueCommand(-1, string.format('/exec %s', profile_filename))
     end)
     if ok then
         printf('Loaded jobbinds profile: %s', profile_filename)
+        
+        -- Then load global bindings (JobBinds.txt) to override job-specific ones
+        local global_path = string.format('%s/scripts/JobBinds.txt', AshitaCore:GetInstallPath())
+        local global_file = io.open(global_path, "r")
+        if global_file then
+            global_file:close()
+            debugf('Loading global bindings from JobBinds.txt (overriding job-specific)')
+            pcall(function()
+                AshitaCore:GetChatManager():QueueCommand(-1, '/exec JobBinds.txt')
+            end)
+        else
+            debugf('No global bindings file found at: %s', global_path)
+        end
+        
         -- Update the keyboard UI with the current profile
         update_keyboard_ui(profile_filename, profile_path)
         debugf('Successfully loaded and updated UI with profile: %s', profile_filename)
