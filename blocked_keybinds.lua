@@ -89,20 +89,10 @@ M.blocked_with_modifiers = {
     ['9'] = true,
 }
 
--- Consolidated list of all blocked keys for easy checking
-M.all_blocked = {}
-
--- Function to populate the consolidated list
-local function populate_all_blocked()
-    for key, _ in pairs(M.blocked) do
-        M.all_blocked[key:upper()] = true
-    end
-end
-
 -- Function to check if a key is blocked
 function M.is_key_blocked(key)
     if not key then return false end
-    return M.all_blocked[key:upper()] == true
+    return M.blocked[key:upper()] == true
 end
 
 -- Function to check if a key combination is blocked
@@ -154,27 +144,5 @@ function M.is_combination_blocked(key, modifiers)
     return false, nil
 end
 
--- Function to get a user-friendly error message for blocked keys
-function M.get_block_reason(key, modifiers)
-    if not key then return nil end
-    
-    local base_key = key:upper()
-    
-    -- Check for restricted modifier combinations first
-    if M.blocked_with_modifiers[base_key] and modifiers then
-        local mod_string = modifiers:upper()
-        if mod_string:find('CTRL') then
-            return string.format("'%s' cannot be used with Ctrl modifier (use alone or with Shift)", base_key)
-        elseif mod_string:find('ALT') then
-            return string.format("'%s' cannot be used with Alt modifier (use alone or with Shift)", base_key)
-        end
-    end
-    
-    -- Default message for completely blocked keys
-    return string.format("Key '%s' is protected and cannot be rebound", base_key)
-end
-
--- Initialize the consolidated list
-populate_all_blocked()
 
 return M

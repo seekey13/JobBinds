@@ -24,14 +24,6 @@ function ui_functions.get_scripts_path()
     return string.format('%s/scripts', AshitaCore:GetInstallPath())
 end
 
--- Function to ensure directory exists
-local function ensure_directory_exists(path)
-    local ok, err = pcall(function()
-        AshitaCore:GetChatManager():QueueCommand(1, string.format('/mkdir "%s"', path))
-    end)
-    return ok
-end
-
 -- ============================================================================
 -- MACRO FILENAME GENERATION
 -- ============================================================================
@@ -88,8 +80,7 @@ function ui_functions.validate_key_binding(binding_key, shift_modifier, alt_modi
     
     local is_blocked, error_msg = blocked_keybinds.is_combination_blocked(binding_key, modifier_string)
     if is_blocked then
-        local message = error_msg or blocked_keybinds.get_block_reason(binding_key, modifier_string)
-        return false, message
+        return false, error_msg
     end
     
     return true, ''
@@ -121,15 +112,6 @@ function ui_functions.generate_bind_command(binding)
     end
     
     return string.format('/bind %s %s', key_part, command)
-end
-
--- Function to generate binding suffix for display
-function ui_functions.generate_binding_suffix(shift_modifier, alt_modifier, ctrl_modifier)
-    local suffix = ''
-    if ctrl_modifier then suffix = suffix .. '^' end
-    if alt_modifier then suffix = suffix .. '!' end
-    if shift_modifier then suffix = suffix .. '+' end
-    return suffix
 end
 
 -- ============================================================================
@@ -288,37 +270,10 @@ end
 -- MACRO FILE OPERATIONS
 -- ============================================================================
 
--- Function to generate profile name for macros
-function ui_functions.generate_profile_name()
-    local ok, party = pcall(function() return AshitaCore:GetMemoryManager():GetParty() end)
-    if not ok or not party then
-        return 'unknown'
-    end
-    
-    local okj, job = pcall(function() return party:GetMemberMainJob(0) end)
-    local oksj, subjob = pcall(function() return party:GetMemberSubJob(0) end)
-    
-    if not okj or not oksj then
-        return 'unknown'
-    end
-    
-    local job_names = {
-        [1] = 'WAR', [2] = 'MNK', [3] = 'WHM', [4] = 'BLM', [5] = 'RDM', [6] = 'THF',
-        [7] = 'PLD', [8] = 'DRK', [9] = 'BST', [10] = 'BRD', [11] = 'RNG', [12] = 'SAM',
-        [13] = 'NIN', [14] = 'DRG', [15] = 'SMN', [16] = 'BLU', [17] = 'COR', [18] = 'PUP',
-        [19] = 'DNC', [20] = 'SCH', [21] = 'GEO', [22] = 'RUN'
-    }
-    
-    local job_name = job_names[job] or 'UNK'
-    local subjob_name = job_names[subjob] or 'UNK'
-    
-    return string.format('%s_%s', job_name, subjob_name)
-end
-
 -- Function to create macro file
 function ui_functions.create_macro_file(macro_name, content, existing_command)
     local scripts_path = ui_functions.get_scripts_path()
-    ensure_directory_exists(scripts_path)
+    pcall(function() AshitaCore:GetChatManager():QueueCommand(1, string.format('/mkdir "%s"', scripts_path)) end)
     
     local macro_path = string.format('%s/%s', scripts_path, macro_name)
     if not macro_path:match('%.txt$') then
