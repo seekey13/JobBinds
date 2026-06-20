@@ -102,7 +102,7 @@ function M.is_combination_blocked(key, modifiers)
     local base_key = key:upper()
     
     -- Check if base key is completely blocked
-    if M.is_key_blocked(base_key) then
+    if M.blocked[base_key] then
         return true, string.format("Key '%s' is protected and cannot be rebound", base_key)
     end
     

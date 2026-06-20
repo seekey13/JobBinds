@@ -156,9 +156,10 @@ end
 
 -- Helper: Load profile and track keys for future unload
 local function load_and_track_profile(jobid, subjobid)
+    local profile_path = get_profile_path(jobid, subjobid)
     local loaded = load_profile(jobid, subjobid)
     if loaded then
-        last_profile_keys = read_profile_keys(get_profile_path(jobid, subjobid))
+        last_profile_keys = read_profile_keys(profile_path)
     end
     return loaded
 end

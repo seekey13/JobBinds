@@ -705,7 +705,6 @@ local function render_binding_editor()
     profile_display = profile_display:gsub('%.txt$', ''):gsub('_', '/');
     imgui.Text(profile_display);
     
-    -- Key binding detection (simplified for demo)
     if keyboard_ui.is_binding then
         for key_code = 1, 255 do
             local ok, is_pressed = pcall(function() return imgui.IsKeyPressed(key_code) end)
