@@ -107,16 +107,12 @@ local function unload_profile(keys)
     end
     debugf('Unbinding %d keys', #keys)
     for _, key in ipairs(keys) do
-        if not KEY_BLACKLIST[key] then
-            debugf('Unbinding key: %s', key)
-            local ok = pcall(function()
-                AshitaCore:GetChatManager():QueueCommand(-1, string.format('/unbind %s', key))
-            end)
-            if not ok then
-                errorf("Failed to unbind key: %s", key)
-            end
-        else
-            debugf('Skipped unbinding blacklisted key: %s', key)
+        debugf('Unbinding key: %s', key)
+        local ok = pcall(function()
+            AshitaCore:GetChatManager():QueueCommand(-1, string.format('/unbind %s', key))
+        end)
+        if not ok then
+            errorf("Failed to unbind key: %s", key)
         end
     end
     printf('Previous job/subjob binds unloaded.')
@@ -125,12 +121,6 @@ end
 -- Helper: Get safe job name for display (handles nil values)
 local function get_safe_job_name(jobid)
     return jobid and get_job_shortname(jobid) or 'nil'
-end
-
--- Helper: Update keyboard UI with profile information
-local function update_keyboard_ui(profile_filename, profile_path)
-    keyboard_ui.set_current_profile(profile_filename)
-    keyboard_ui.load_profile(profile_path)
 end
 
 -- Load new profile via /exec
@@ -154,8 +144,8 @@ local function load_profile(jobid, subjobid)
     end)
     if ok then
         printf('Loaded jobbinds profile: %s', profile_filename)
-        -- Update the keyboard UI with the current profile
-        update_keyboard_ui(profile_filename, profile_path)
+        keyboard_ui.set_current_profile(profile_filename)
+        keyboard_ui.load_profile(profile_path)
         debugf('Successfully loaded and updated UI with profile: %s', profile_filename)
         return true
     else
@@ -166,9 +156,10 @@ end
 
 -- Helper: Load profile and track keys for future unload
 local function load_and_track_profile(jobid, subjobid)
+    local profile_path = get_profile_path(jobid, subjobid)
     local loaded = load_profile(jobid, subjobid)
     if loaded then
-        last_profile_keys = read_profile_keys(get_profile_path(jobid, subjobid))
+        last_profile_keys = read_profile_keys(profile_path)
     end
     return loaded
 end
@@ -189,8 +180,8 @@ local function handle_job_change()
     
     -- Unload previous profile
     unload_profile(last_profile_keys)
-    -- Clear the keyboard UI profile name and bindings
-    update_keyboard_ui(nil, nil)
+    keyboard_ui.set_current_profile(nil)
+    keyboard_ui.load_profile(nil)
     
     -- Update job tracking
     last_job, last_subjob = jobid, subjobid

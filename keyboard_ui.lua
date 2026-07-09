@@ -705,7 +705,6 @@ local function render_binding_editor()
     profile_display = profile_display:gsub('%.txt$', ''):gsub('_', '/');
     imgui.Text(profile_display);
     
-    -- Key binding detection (simplified for demo)
     if keyboard_ui.is_binding then
         for key_code = 1, 255 do
             local ok, is_pressed = pcall(function() return imgui.IsKeyPressed(key_code) end)
@@ -765,14 +764,6 @@ function keyboard_ui.show()
     end
 end
 
-function keyboard_ui.hide()
-    keyboard_ui.is_open[1] = false;
-end
-
-function keyboard_ui.toggle()
-    keyboard_ui.is_open[1] = not keyboard_ui.is_open[1];
-end
-
 function keyboard_ui.set_current_profile(profile_name)
     keyboard_ui.current_profile = profile_name or 'No Profile Loaded';
 end
@@ -780,10 +771,6 @@ end
 function keyboard_ui.load_profile(profile_path)
     current_bindings = ui_functions.load_bindings_from_profile(profile_path, keyboard_ui.debug_mode);
     current_profile_path = profile_path;
-end
-
-function keyboard_ui.load_bindings(bindings)
-    current_bindings = bindings or {};
 end
 
 function keyboard_ui.set_debug_mode(enabled)

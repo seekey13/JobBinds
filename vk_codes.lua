@@ -93,35 +93,14 @@ vk_codes.key_mappings = {
     [222] = "'",         -- Apostrophe key
 };
 
--- Reverse lookup: Key Name to VK Code
-vk_codes.name_to_code = {};
-for code, name in pairs(vk_codes.key_mappings) do
-    vk_codes.name_to_code[name] = code;
-end
-
 -- Function to get key name from VK code
 function vk_codes.get_key_name(vk_code)
     return vk_codes.key_mappings[vk_code] or ('KEY_' .. vk_code);
 end
 
--- Function to get VK code from key name
-function vk_codes.get_vk_code(key_name)
-    return vk_codes.name_to_code[key_name];
-end
-
 -- Function to check if a VK code is a known key
 function vk_codes.is_known_key(vk_code)
     return vk_codes.key_mappings[vk_code] ~= nil;
-end
-
--- Function to get all available keys (for UI dropdowns, etc.)
-function vk_codes.get_all_keys()
-    local keys = {};
-    for _, name in pairs(vk_codes.key_mappings) do
-        table.insert(keys, name);
-    end
-    table.sort(keys);
-    return keys;
 end
 
 return vk_codes;
