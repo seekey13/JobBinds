@@ -273,7 +273,8 @@ end
 -- Function to create macro file
 function ui_functions.create_macro_file(macro_name, content, existing_command)
     local scripts_path = ui_functions.get_scripts_path()
-    pcall(function() AshitaCore:GetChatManager():QueueCommand(1, string.format('/mkdir "%s"', scripts_path)) end)
+    -- ponytail: synchronous mkdir; QueueCommand was async and raced the io.open below. 2>nul swallows "already exists".
+    os.execute(string.format('mkdir "%s" 2>nul', scripts_path))
     
     local macro_path = string.format('%s/%s', scripts_path, macro_name)
     if not macro_path:match('%.txt$') then
