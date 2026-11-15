@@ -74,6 +74,7 @@ local function run_import()
 end
 
 ashita.events.register('load', 'jobbinds_load', function ()
+    keyboard_ui.load(); -- the window's fonts, before any frame
     -- First run of 2.0: bring the 1.x profiles along
     if not ashita.fs.exists(profiles.dir) then
         local imported = import.run();

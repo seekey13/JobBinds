@@ -37,19 +37,19 @@ keyboard, type what it should do, and the binding follows you whenever you chang
 
 ### Binding a key
 
-1. Click a key on the keyboard. Keys the game needs are dark red and can't be picked.
+1. Click a key on the keyboard. Keys the game needs are faded and can't be picked.
 2. Choose the **Profile** the binding belongs to (see below). It starts on your exact job/subjob.
-3. Type a command next to the key, or next to `+ Ctrl`, `+ Alt` or `+ Shift`.
+3. Type a command next to the key, or next to `Ctrl +`, `Alt +` or `Shift +` the key.
 4. Click **Save**. The key works straight away.
 
 **Delete** removes the key's bindings from the selected profile. The `X` beside a row empties just that row (then Save).
 
-Key colours: green is the key you're editing, the standard button colour is a key that's bound, grey is free, dark red
-is protected. Hover a bound key to see what it runs and which profile that comes from.
+Key colours: outlined in blue is the key you're editing, a raised lighter key is one that's bound, a dark sunken key
+is free, a faded one is protected. Hover a bound key to see what it runs and which profile that comes from.
 
 ### Macros
 
-Tick **Macro** on a row to get a multi-line box. Each line is one command, sent in order:
+Turn on **Macro** on a row to get a multi-line box. Each line is one command, sent in order:
 
 ```
 /ja "Sneak Attack" <me>
