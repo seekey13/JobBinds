@@ -347,7 +347,7 @@ function style.segments_width(labels)
 end
 
 -- Words side by side in a sunken box, the one at index chosen.
--- Returns index, changed.
+-- Returns index, changed, whether the pointer is on one.
 function style.segments(id, x, cy, labels, index)
     local dl = imgui.GetWindowDrawList();
     local px = S(style.BODY - 1);
@@ -356,10 +356,11 @@ function style.segments(id, x, cy, labels, index)
     local total, widths = style.segments_width(labels);
     fill(dl, x, y, total, h, P.well, S(4));
     outline(dl, x, y, total, h, P.well_edge, S(4));
-    local changed, at = false, x + S(2);
+    local changed, over, at = false, false, x + S(2);
     for i, label in ipairs(labels) do
         local sid, sy, sh = id .. '_' .. i, y + S(2), h - S(4);
         local hovered, clicked = hit(sid, at, sy, widths[i], sh);
+        over = over or hovered;
         if clicked and index ~= i then
             index, changed = i, true;
         end
@@ -373,7 +374,7 @@ function style.segments(id, x, cy, labels, index)
         style.text_centred(dl, at + widths[i] / 2, cy, label, mix(P.dim, P.text, t), fonts.text, px);
         at = at + widths[i] + S(1);
     end
-    return index, changed;
+    return index, changed, over;
 end
 
 function style.chip_width(label)

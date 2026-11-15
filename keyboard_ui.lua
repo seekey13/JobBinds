@@ -56,8 +56,7 @@ local TITLE_H   = 36;
 local KEY_H     = 28;
 local KEY_GAP   = 6;
 local NAV_GAP   = 12;   -- before the Ins/Del/Home/End column
-local BLOCK_GAP = 14;   -- below the keyboard
-local PROFILE_H = 44;   -- the profile picker, above the keyboard
+local BLOCK_GAP = 14;   -- above and below the keyboard
 local HINT_H    = 64;   -- the editor with no key picked
 local HEAD_H    = 30;   -- the editor's heading
 local ROW_H     = 34;   -- a one-line binding
@@ -186,26 +185,26 @@ local function keyboard_height()
     return #keyboard_layout * S(KEY_H) + (#keyboard_layout - 1) * S(KEY_GAP);
 end
 
--- Which profile the editor works on: the profiles from the left, then the label
-local function draw_scope_picker(dl, x, y)
-    local cy = y + S(PROFILE_H) / 2;
+-- Which profile the editor works on, centred between left and right (the
+-- title bar's room between the title and the close cross)
+local function draw_scope_picker(left, right, cy)
     local labels = {};
     for i, scope in ipairs(scopes) do
         labels[i] = scope.label;
     end
-    if #labels > 0 then
-        local index, changed = style.segments('##jb_scope', x, cy, labels, scope_index);
-        if changed then
-            scope_index = index;
-            load_rows();
-        end
-        x = x + style.segments_width(labels) + S(10);
+    if #labels == 0 then
+        return;
     end
-
-    local px = S(style.BODY);
-    style.text_mid(dl, x, cy, 'Profile', P.dim, style.fonts.text, px);
-    style.hit('##jb_profile_label', x, cy - S(11), style.measure('Profile', style.fonts.text, px), S(22));
-    style.tip('Each profile applies to the jobs it names.\nWhen two bind the same key, the one further right wins.');
+    local x = math.floor((left + right - style.segments_width(labels)) / 2);
+    local index, changed, hovered = style.segments('##jb_scope', math.max(left, x), cy, labels, scope_index);
+    if changed then
+        scope_index = index;
+        load_rows();
+    end
+    if hovered then
+        style.tooltip('The profile being edited. Each applies to the jobs it names.\n'
+            .. 'When two bind the same key, the one further right wins.');
+    end
 end
 
 -- What the editor will draw for the key picked, and how tall it is: the
@@ -246,9 +245,9 @@ local function draw_binding_row(dl, item, key, x, y, right)
 
     local at = x;
     if row.modifier ~= '' then
-        local px = S(style.BODY);
+        local px = S(style.BODY + 5);
         at = at + style.keycap(dl, at, cy, row.modifier) + S(6);
-        style.text_mid(dl, at, cy, '+', P.faint, style.fonts.text, px);
+        style.text_mid(dl, at, cy, '+', P.dim, style.fonts.text, px);
         at = at + style.measure('+', style.fonts.text, px) + S(6);
     end
     style.keycap(dl, at, cy, key);
@@ -334,18 +333,20 @@ local function draw_window(plan, pw, ph)
 
     -- Title bar
     local cy = y + S(TITLE_H) / 2;
-    style.text_mid(dl, x + pad, cy, 'JobBinds', P.white, style.fonts.semi, S(style.BODY));
+    local title_px = S(style.BODY);
+    style.text_mid(dl, x + pad, cy, 'JobBinds', P.white, style.fonts.semi, title_px);
     local box = S(21);
-    if style.cross('##jb_close', x + pw - pad - box / 2 + S(4), cy, box) then
+    local cross_x = x + pw - pad - box / 2 + S(4);
+    if style.cross('##jb_close', cross_x, cy, box) then
         keyboard_ui.is_open[1] = false;
     end
     style.tip('Close');
+    draw_scope_picker(x + pad + style.measure('JobBinds', style.fonts.semi, title_px) + S(12),
+        cross_x - box / 2 - S(8), cy);
     style.line(dl, x, y + S(TITLE_H), x + pw, y + S(TITLE_H), P.border);
 
     local left, right = x + pad, x + pw - pad;
-    y = y + S(TITLE_H);
-    draw_scope_picker(dl, left, y);
-    y = y + S(PROFILE_H);
+    y = y + S(TITLE_H) + S(BLOCK_GAP);
     draw_keyboard(dl, left, y, right - left);
     y = y + keyboard_height() + S(BLOCK_GAP);
     style.line(dl, x, y, x + pw, y, P.border);
@@ -366,7 +367,7 @@ function keyboard_ui.render()
     style.frame();
     local plan, editor_h = plan_editor();
     local m, pw = S(MARGIN), S(INNER_W) + S(PAD) * 2;
-    local ph = S(TITLE_H) + S(PROFILE_H) + keyboard_height() + S(BLOCK_GAP) + editor_h;
+    local ph = S(TITLE_H) + S(BLOCK_GAP) + keyboard_height() + S(BLOCK_GAP) + editor_h;
 
     local screen_w, screen_h = style.screen();
     imgui.SetNextWindowPos({ screen_w / 2, screen_h / 2 }, ImGuiCond_FirstUseEver, { 0.5, 0.5 });
