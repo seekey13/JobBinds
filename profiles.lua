@@ -51,6 +51,7 @@ function profiles.parse_chord(text)
     key = key:upper();
     local chord = {
         key   = KEY_ALIASES[key] or key,
+        alias = KEY_ALIASES[key] ~= nil,
         ctrl  = prefix:find('^', 1, true) ~= nil,
         alt   = prefix:find('!', 1, true) ~= nil,
         shift = prefix:find('+', 1, true) ~= nil,
@@ -86,7 +87,8 @@ function profiles.layer(id)
             elseif line ~= '' and line:sub(1, 1) ~= '#' then
                 local chord = profiles.parse_chord(trim(line));
                 lines = nil;
-                if chord then
+                -- a key under its other name (DELETE) gives way to its own (DEL)
+                if chord and not (chord.alias and layer[chord.id]) then
                     lines = {};
                     layer[chord.id] = lines;
                 end
