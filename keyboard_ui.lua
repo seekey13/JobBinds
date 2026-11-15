@@ -57,14 +57,14 @@ local KEY_H     = 28;
 local KEY_GAP   = 6;
 local NAV_GAP   = 12;   -- before the Ins/Del/Home/End column
 local BLOCK_GAP = 14;   -- above and below the keyboard
-local HINT_H    = 64;   -- the editor with no key picked
 local HEAD_H    = 30;   -- the editor's heading
 local ROW_H     = 34;   -- a one-line binding
 local FIELD_H   = 26;
 local MULTI_H   = 100;  -- a macro's field
 local NOTE_H    = 18;   -- "From Global: ..." under a field
 local FIELD_X   = 152;  -- where the command fields start
-local FOOT_H    = 46;   -- Save and Delete
+local FOOT_H    = 46;   -- the last row: the profile picker, Delete and Save
+local ERROR_H   = 24;   -- a save that failed, under the last row
 
 local selected_key = '';   -- the key being edited ('' for none)
 local scopes = {};         -- the profiles that apply now, lowest priority first
@@ -185,18 +185,16 @@ local function keyboard_height()
     return #keyboard_layout * S(KEY_H) + (#keyboard_layout - 1) * S(KEY_GAP);
 end
 
--- Which profile the editor works on, centred between left and right (the
--- title bar's room between the title and the close cross)
-local function draw_scope_picker(left, right, cy)
+-- Which profile the editor works on, from x. Returns where it ends.
+local function draw_scope_picker(x, cy)
     local labels = {};
     for i, scope in ipairs(scopes) do
         labels[i] = scope.label;
     end
     if #labels == 0 then
-        return;
+        return x;
     end
-    local x = math.floor((left + right - style.segments_width(labels)) / 2);
-    local index, changed, hovered = style.segments('##jb_scope', math.max(left, x), cy, labels, scope_index);
+    local index, changed, hovered = style.segments('##jb_scope', x, cy, labels, scope_index);
     if changed then
         scope_index = index;
         load_rows();
@@ -205,13 +203,14 @@ local function draw_scope_picker(left, right, cy)
         style.tooltip('The profile being edited. Each applies to the jobs it names.\n'
             .. 'When two bind the same key, the one further right wins.');
     end
+    return x + style.segments_width(labels);
 end
 
 -- What the editor will draw for the key picked, and how tall it is: the
 -- window's size is set before it is drawn. nil with no key picked.
 local function plan_editor()
     if selected_key == '' then
-        return nil, S(HINT_H);
+        return nil, S(FOOT_H);
     end
     local scope = scopes[scope_index];
     local plan = { key = selected_key };
@@ -235,7 +234,8 @@ local function plan_editor()
             height = height + item.h;
         end
     end
-    return plan, height + S(8) + S(FOOT_H);
+    plan.error = error_message ~= '' and error_message or nil; -- on a line of its own, under the last row
+    return plan, height + S(FOOT_H) + (plan.error and S(ERROR_H) or 0);
 end
 
 -- One binding: its keys, the command, a cross to clear it, the Macro toggle
@@ -276,11 +276,15 @@ local function draw_binding_row(dl, item, key, x, y, right)
     end
 end
 
--- The editor for the key picked: a heading, its bindings, Save and Delete
-local function draw_editor(dl, plan, x, y, right, panel_x, panel_right)
+-- The editor for the key picked: a heading, its bindings, then the last row,
+-- the profile picker with Delete and Save. With no key picked, that row alone,
+-- a hint where the buttons go.
+local function draw_editor(dl, plan, x, y, right)
     if not plan then
-        style.text_centred(dl, (x + right) / 2, y + S(HINT_H) / 2, 'Click a key on the keyboard to bind it',
-            P.dim, style.fonts.text, S(style.BODY - 1));
+        local cy = y + S(FOOT_H) / 2;
+        draw_scope_picker(x, cy);
+        style.text_right(dl, right, cy, 'Click a key on the keyboard to bind it', P.dim, style.fonts.text,
+            S(style.BODY - 1));
         return;
     end
 
@@ -297,9 +301,8 @@ local function draw_editor(dl, plan, x, y, right, panel_x, panel_right)
         y = y + item.h;
     end
 
-    y = y + S(8);
-    style.line(dl, panel_x, y, panel_right, y, P.border);
     cy = y + S(FOOT_H) / 2;
+    draw_scope_picker(x, cy);
 
     local save_w = math.max(S(84), style.button_width('Save'));
     local delete_w = math.max(S(84), style.button_width('Delete'));
@@ -312,12 +315,12 @@ local function draw_editor(dl, plan, x, y, right, panel_x, panel_right)
         save_rows(false);
     end
 
-    if error_message ~= '' then
+    if plan.error then
         local font, px = style.fonts.base, imgui.GetFontSize();
-        local room = delete_x - S(12) - x;
-        style.text_mid(dl, x, cy, style.fit(error_message, room, font, px), P.rose, font, px);
-        style.hit('##jb_error', x, cy - S(11), room, S(22));
-        style.tip(error_message);
+        local ey = y + S(FOOT_H) - S(8);
+        style.text_mid(dl, x, ey + S(ERROR_H) / 2 - S(4), style.fit(plan.error, right - x, font, px), P.rose, font, px);
+        style.hit('##jb_error', x, ey, right - x, S(ERROR_H) - S(4));
+        style.tip(plan.error); -- whole, when it was cut to fit
     end
 end
 
@@ -333,16 +336,12 @@ local function draw_window(plan, pw, ph)
 
     -- Title bar
     local cy = y + S(TITLE_H) / 2;
-    local title_px = S(style.BODY);
-    style.text_mid(dl, x + pad, cy, 'JobBinds', P.white, style.fonts.semi, title_px);
+    style.text_mid(dl, x + pad, cy, 'JobBinds', P.white, style.fonts.semi, S(style.BODY));
     local box = S(21);
-    local cross_x = x + pw - pad - box / 2 + S(4);
-    if style.cross('##jb_close', cross_x, cy, box) then
+    if style.cross('##jb_close', x + pw - pad - box / 2 + S(4), cy, box) then
         keyboard_ui.is_open[1] = false;
     end
     style.tip('Close');
-    draw_scope_picker(x + pad + style.measure('JobBinds', style.fonts.semi, title_px) + S(12),
-        cross_x - box / 2 - S(8), cy);
     style.line(dl, x, y + S(TITLE_H), x + pw, y + S(TITLE_H), P.border);
 
     local left, right = x + pad, x + pw - pad;
@@ -351,7 +350,7 @@ local function draw_window(plan, pw, ph)
     y = y + keyboard_height() + S(BLOCK_GAP);
     style.line(dl, x, y, x + pw, y, P.border);
 
-    draw_editor(dl, plan, left, y, right, x, x + pw);
+    draw_editor(dl, plan, left, y, right);
 end
 
 local WINDOW_FLAGS = ImGuiWindowFlags_NoTitleBar + ImGuiWindowFlags_NoResize + ImGuiWindowFlags_NoScrollbar

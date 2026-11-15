@@ -38,7 +38,7 @@ keyboard, type what it should do, and the binding follows you whenever you chang
 ### Binding a key
 
 1. Click a key on the keyboard. Keys the game needs are faded and can't be picked.
-2. Choose the profile the binding belongs to, in the window's title bar (see below). It starts on your exact job/subjob.
+2. Choose the profile the binding belongs to, at the bottom left of the window (see below). It starts on your exact job/subjob.
 3. Type a command next to the key, or next to `Ctrl +`, `Alt +` or `Shift +` the key.
 4. Click **Save**. The key works straight away.
 
