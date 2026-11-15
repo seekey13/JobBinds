@@ -56,15 +56,15 @@ local TITLE_H   = 36;
 local KEY_H     = 28;
 local KEY_GAP   = 6;
 local NAV_GAP   = 12;   -- before the Ins/Del/Home/End column
-local BLOCK_GAP = 14;   -- above and below the keyboard
-local PROFILE_H = 40;
+local BLOCK_GAP = 14;   -- below the keyboard
+local PROFILE_H = 44;   -- the profile picker, above the keyboard
 local HINT_H    = 64;   -- the editor with no key picked
 local HEAD_H    = 30;   -- the editor's heading
-local ROW_H     = 32;   -- a one-line binding
+local ROW_H     = 34;   -- a one-line binding
 local FIELD_H   = 26;
 local MULTI_H   = 100;  -- a macro's field
 local NOTE_H    = 18;   -- "From Global: ..." under a field
-local FIELD_X   = 122;  -- where the command fields start
+local FIELD_X   = 152;  -- where the command fields start
 local FOOT_H    = 46;   -- Save and Delete
 
 local selected_key = '';   -- the key being edited ('' for none)
@@ -142,8 +142,9 @@ local function draw_key(dl, id, key, x, y, w, h)
     if lit > 0.01 then
         style.fill(dl, x, y, w, h, '#FFFFFF', S(4), 0.05 * lit);
     end
+    -- a letter is drawn larger than a word, which has to fit its key
     style.text_centred(dl, x + w / 2, y + h / 2, key, mix(mix(ink, P.text, lit), P.white, picked),
-        style.fonts.text, S(style.SMALL), alpha);
+        style.fonts.text, S(#key == 1 and style.BODY + 1 or style.BODY - 1.5), alpha);
 
     -- Show what the key runs on hover
     if bindings and hovered then
@@ -185,27 +186,26 @@ local function keyboard_height()
     return #keyboard_layout * S(KEY_H) + (#keyboard_layout - 1) * S(KEY_GAP);
 end
 
--- Which profile the editor works on
-local function draw_scope_picker(dl, x, y, right)
+-- Which profile the editor works on: the profiles from the left, then the label
+local function draw_scope_picker(dl, x, y)
     local cy = y + S(PROFILE_H) / 2;
-    local px = S(style.BODY);
-    style.text_mid(dl, x, cy, 'Profile', P.text, style.fonts.text, px);
-    style.hit('##jb_profile_label', x, cy - S(11), style.measure('Profile', style.fonts.text, px), S(22));
-    style.tip('Each profile applies to the jobs it names.\nWhen two bind the same key, the one further right wins.');
-
     local labels = {};
     for i, scope in ipairs(scopes) do
         labels[i] = scope.label;
     end
-    if #labels == 0 then
-        return;
+    if #labels > 0 then
+        local index, changed = style.segments('##jb_scope', x, cy, labels, scope_index);
+        if changed then
+            scope_index = index;
+            load_rows();
+        end
+        x = x + style.segments_width(labels) + S(10);
     end
-    local total = style.segments_width(labels);
-    local index, changed = style.segments('##jb_scope', right - total, cy, labels, scope_index);
-    if changed then
-        scope_index = index;
-        load_rows();
-    end
+
+    local px = S(style.BODY);
+    style.text_mid(dl, x, cy, 'Profile', P.dim, style.fonts.text, px);
+    style.hit('##jb_profile_label', x, cy - S(11), style.measure('Profile', style.fonts.text, px), S(22));
+    style.tip('Each profile applies to the jobs it names.\nWhen two bind the same key, the one further right wins.');
 end
 
 -- What the editor will draw for the key picked, and how tall it is: the
@@ -246,10 +246,10 @@ local function draw_binding_row(dl, item, key, x, y, right)
 
     local at = x;
     if row.modifier ~= '' then
-        local px = S(style.SMALL);
-        at = at + style.keycap(dl, at, cy, row.modifier) + S(5);
+        local px = S(style.BODY);
+        at = at + style.keycap(dl, at, cy, row.modifier) + S(6);
         style.text_mid(dl, at, cy, '+', P.faint, style.fonts.text, px);
-        at = at + style.measure('+', style.fonts.text, px) + S(5);
+        at = at + style.measure('+', style.fonts.text, px) + S(6);
     end
     style.keycap(dl, at, cy, key);
 
@@ -343,13 +343,11 @@ local function draw_window(plan, pw, ph)
     style.line(dl, x, y + S(TITLE_H), x + pw, y + S(TITLE_H), P.border);
 
     local left, right = x + pad, x + pw - pad;
-    y = y + S(TITLE_H) + S(BLOCK_GAP);
+    y = y + S(TITLE_H);
+    draw_scope_picker(dl, left, y);
+    y = y + S(PROFILE_H);
     draw_keyboard(dl, left, y, right - left);
     y = y + keyboard_height() + S(BLOCK_GAP);
-
-    style.line(dl, x, y, x + pw, y, P.border);
-    draw_scope_picker(dl, left, y, right);
-    y = y + S(PROFILE_H);
     style.line(dl, x, y, x + pw, y, P.border);
 
     draw_editor(dl, plan, left, y, right, x, x + pw);
@@ -368,7 +366,7 @@ function keyboard_ui.render()
     style.frame();
     local plan, editor_h = plan_editor();
     local m, pw = S(MARGIN), S(INNER_W) + S(PAD) * 2;
-    local ph = S(TITLE_H) + S(BLOCK_GAP) + keyboard_height() + S(BLOCK_GAP) + S(PROFILE_H) + editor_h;
+    local ph = S(TITLE_H) + S(PROFILE_H) + keyboard_height() + S(BLOCK_GAP) + editor_h;
 
     local screen_w, screen_h = style.screen();
     imgui.SetNextWindowPos({ screen_w / 2, screen_h / 2 }, ImGuiCond_FirstUseEver, { 0.5, 0.5 });

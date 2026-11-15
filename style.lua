@@ -377,12 +377,12 @@ function style.segments(id, x, cy, labels, index)
 end
 
 function style.chip_width(label)
-    return math.max(S(30), measure(label, fonts.text, S(style.SMALL - 0.5)) + S(14));
+    return math.max(S(30), measure(label, fonts.text, S(style.BODY - 1)) + S(22));
 end
 
 -- A small toggle, in the accent while on. Returns clicked.
 function style.chip(id, x, cy, label, on)
-    local w, h = style.chip_width(label), S(20);
+    local w, h = style.chip_width(label), S(24);
     local y = cy - h / 2;
     local hovered, clicked = hit(id, x, y, w, h);
     local dl = imgui.GetWindowDrawList();
@@ -392,15 +392,15 @@ function style.chip(id, x, cy, label, on)
     if hovered then
         fill(dl, x, y, w, h, '#FFFFFF', S(4), 0.06);
     end
-    style.text_centred(dl, x + w / 2, cy, label, mix(P.dim, P.accent2, t), fonts.text, S(style.SMALL - 0.5));
+    style.text_centred(dl, x + w / 2, cy, label, mix(P.dim, P.accent2, t), fonts.text, S(style.BODY - 1));
     return clicked;
 end
 
 -- A keycap ("Ctrl"), only drawn. Returns its width.
 function style.keycap(dl, x, cy, label)
-    local px = S(style.SMALL - 0.5);
-    local w, h = measure(label, fonts.semi, px) + S(10), S(18);
-    fill(dl, x, cy - h / 2, w, h, P.seg, S(3));
+    local px = S(style.BODY);
+    local w, h = measure(label, fonts.semi, px) + S(14), S(24);
+    fill(dl, x, cy - h / 2, w, h, P.seg, S(4));
     style.text_centred(dl, x + w / 2, cy, label, P.text, fonts.semi, px);
     return w;
 end
