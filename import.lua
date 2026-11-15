@@ -1,6 +1,7 @@
 --[[
-* JobBinds import: brings JobBinds 1.x profiles (scripts/JOB_SUB.txt, made of
-* /bind lines and /exec'd macro files) into 2.0 profiles. The old files are
+* JobBinds import: brings JobBinds 1.x profiles (scripts/JOB_SUB.txt and the
+* global scripts/JobBinds.txt, made of /bind lines and /exec'd macro files)
+* into 2.0 profiles. The old files are
 * left as they are, and a 2.0 profile that already exists is never replaced.
 --]]
 
@@ -55,8 +56,9 @@ function import.run()
     local imported, skipped = 0, 0;
     for _, name in pairs(files) do
         local main, sub = name:upper():match('^(%u%u%u)_(%u%u%u)%.TXT$');
-        local lines = main and read_lines(profiles.scripts_dir .. '\\' .. name) or {};
-        local id = main and (main .. '_' .. sub);
+        -- JobBinds.txt held 1.x's global bindings
+        local id = main and (main .. '_' .. sub) or (name:upper() == 'JOBBINDS.TXT' and 'ALL') or nil;
+        local lines = id and read_lines(profiles.scripts_dir .. '\\' .. name) or {};
         local found = false;
 
         if id and ashita.fs.exists(profiles.path(id)) then

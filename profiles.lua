@@ -14,10 +14,10 @@
 * Key prefixes: ^ Ctrl, ! Alt, + Shift. Lines starting with # are comments.
 *
 * Four profiles apply to a job combination, later ones winning a shared key:
-*     ALL.txt        every job
 *     SUB_NIN.txt    any main job with /NIN
 *     BLM.txt        BLM with any subjob
 *     BLM_NIN.txt    exactly BLM/NIN
+*     ALL.txt        global: every job, overriding the job profiles
 --]]
 
 require('common');
@@ -30,6 +30,9 @@ profiles.dir = install .. '\\config\\addons\\jobbinds';
 profiles.scripts_dir = install .. '\\scripts';
 
 local cache = {}; -- profile id -> { [chord id] = { command, ... } }
+
+-- Other names for the keys the keyboard shows as DEL and INS
+local KEY_ALIASES = { DELETE = 'DEL', INSERT = 'INS' };
 
 local function trim(text)
     return (text:match('^%s*(.-)%s*$'));
@@ -45,8 +48,9 @@ function profiles.parse_chord(text)
     if not key then
         return nil;
     end
+    key = key:upper();
     local chord = {
-        key   = key:upper(),
+        key   = KEY_ALIASES[key] or key,
         ctrl  = prefix:find('^', 1, true) ~= nil,
         alt   = prefix:find('!', 1, true) ~= nil,
         shift = prefix:find('+', 1, true) ~= nil,
@@ -143,7 +147,7 @@ end
 -- The profiles that apply to a job combination, lowest priority first.
 -- main and sub are job abbreviations, or nil.
 function profiles.scopes(main, sub)
-    local scopes = { { id = 'ALL', label = 'All jobs' } };
+    local scopes = {};
     if sub then
         scopes[#scopes + 1] = { id = 'SUB_' .. sub, label = 'Any/' .. sub };
     end
@@ -153,6 +157,7 @@ function profiles.scopes(main, sub)
     if main and sub then
         scopes[#scopes + 1] = { id = main .. '_' .. sub, label = main .. '/' .. sub };
     end
+    scopes[#scopes + 1] = { id = 'ALL', label = 'Global' };
     return scopes;
 end
 

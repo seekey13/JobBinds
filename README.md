@@ -9,7 +9,7 @@ keyboard, type what it should do, and the binding follows you whenever you chang
 
 - **No more script files.** 1.x kept each profile and each macro as a `/exec` script in `Ashita/scripts`. 2.0 runs
   bindings itself: a macro is just several lines typed into the editor, with nothing to name and no files to manage.
-- **Profiles stack.** A binding can apply to every job, to a main job with any subjob, to a subjob under any main job,
+- **Profiles stack.** A binding can be global, or apply to a main job with any subjob, to a subjob under any main job,
   or to one exact combination. Bind your BLM nukes once instead of once per subjob.
 - **Your 1.x profiles are imported** the first time 2.0 loads (see [Upgrading from 1.x](#upgrading-from-1x)).
 
@@ -63,14 +63,14 @@ Tick **Macro** on a row to get a multi-line box. Each line is one command, sent 
 
 ### Profiles
 
-Four profiles apply to any job combination. When two bind the same key, the more specific one wins:
+Four profiles apply to any job combination. When two bind the same key, the one lower in this table wins:
 
 | Profile | Applies to | File |
 |---------|------------|------|
-| All jobs | every job | `ALL.txt` |
 | Any/NIN | any main job with that subjob | `SUB_NIN.txt` |
 | BLM/Any | that main job with any subjob | `BLM.txt` |
-| BLM/NIN | exactly that combination (highest priority) | `BLM_NIN.txt` |
+| BLM/NIN | exactly that combination | `BLM_NIN.txt` |
+| Global | every job, overriding the job profiles | `ALL.txt` |
 
 The editor notes under a row when another profile supplies or overrides that key.
 
@@ -104,7 +104,7 @@ Key prefixes: `^` Ctrl, `!` Alt, `+` Shift. Run `/jb reload` after editing a fil
 Keys the game uses can't be bound:
 
 **Movement and menus:** `W` `A` `S` `D` `F` `V` `R` `Y` `H` `I` `J` `K` `L` `N` `,` `.` `/` `-`  
-**Navigation:** arrow keys, `Tab`, `Enter`, `Space`, `Escape`, `Backspace`  
+**Navigation:** arrow keys, `Tab`, `Enter`, `Space`, `Escape`, `Backspace`, `Page Up`, `Page Down`  
 **Function keys:** `F1` to `F12`
 
 `B` `E` `M` `Q` `T` `U` `X` and the number keys can be bound alone or with Shift, but not with Ctrl or Alt. A protected
@@ -112,7 +112,8 @@ key written into a profile file by hand is ignored.
 
 ## Upgrading from 1.x
 
-The first time 2.0 loads it reads your old `scripts/JOB_SUB.txt` profiles and writes each as a 2.0 profile, with the
+The first time 2.0 loads it reads your old `scripts/JOB_SUB.txt` profiles, and the global `scripts/JobBinds.txt` if you
+had one, and writes each as a 2.0 profile, with the
 contents of any macro file a key `/exec`'d copied into the binding. Nothing in the scripts folder is changed or
 removed; once you're happy, the old profile and macro files can be deleted. `/jb import` runs the import again and never
 replaces a 2.0 profile that already exists.
@@ -141,7 +142,7 @@ Open an issue or pull request on the [GitHub repository](https://github.com/seek
 ### Version 2.0
 - Rewritten from scratch
 - Bindings run by the addon: no `/exec` scripts or macro files
-- Stacking profiles: all jobs, subjob, main job, exact job/subjob
+- Stacking profiles: subjob, main job, exact job/subjob, global
 - Multi-line macros with `/wait` typed straight into the editor
 - Plain-text profiles in `config/addons/jobbinds`
 - Automatic import of 1.x profiles

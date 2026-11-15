@@ -17,22 +17,22 @@ local keyboard_layout = {
     -- Row 1: Number row
     {
         {'`', 26}, {'1', 26}, {'2', 26}, {'3', 26}, {'4', 26}, {'5', 26}, {'6', 26},
-        {'7', 26}, {'8', 26}, {'9', 26}, {'0', 26}, {'-', 26}, {'=', 26}, {'<--', 51}
+        {'7', 26}, {'8', 26}, {'9', 26}, {'0', 26}, {'-', 26}, {'=', 26}, {'<--', 51}, {'INS', 51}
     },
     -- Row 2: QWERTY row
     {
         {'TAB', 38}, {'Q', 26}, {'W', 26}, {'E', 26}, {'R', 26}, {'T', 26}, {'Y', 26},
-        {'U', 26}, {'I', 26}, {'O', 26}, {'P', 26}, {'[', 26}, {']', 26}, {'\\', 38}
+        {'U', 26}, {'I', 26}, {'O', 26}, {'P', 26}, {'[', 26}, {']', 26}, {'\\', 38}, {'DEL', 51}
     },
     -- Row 3: ASDF row
     {
         {'CAPS', 51}, {'A', 26}, {'S', 26}, {'D', 26}, {'F', 26}, {'G', 26}, {'H', 26},
-        {'J', 26}, {'K', 26}, {'L', 26}, {';', 26}, {"'", 26}, {'ENTER', 58}
+        {'J', 26}, {'K', 26}, {'L', 26}, {';', 26}, {"'", 26}, {'ENTER', 58}, {'HOME', 51}
     },
     -- Row 4: ZXCV row
     {
         {'SHIFT', 64}, {'Z', 26}, {'X', 26}, {'C', 26}, {'V', 26}, {'B', 26}, {'N', 26},
-        {'M', 26}, {',', 26}, {'.', 26}, {'/', 26}, {'SHIFT', 78}
+        {'M', 26}, {',', 26}, {'.', 26}, {'/', 26}, {'SHIFT', 78}, {'END', 51}
     }
 };
 
@@ -307,9 +307,9 @@ function keyboard_ui.set_context(new_scopes, bindings, changed)
     end
     ids = table.concat(ids, ' ');
     if ids ~= scope_ids then
-        -- another job: start on its most specific profile
+        -- another job: start on its exact job/subjob profile (Global comes last)
         scope_ids = ids;
-        scope_index = #new_scopes;
+        scope_index = math.max(1, #new_scopes - 1);
     end
     scopes = new_scopes;
     on_changed = changed;
