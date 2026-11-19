@@ -1,7 +1,8 @@
 --[[
-* JobBinds window: a visual keyboard to pick a key, and an editor for what the
-* key runs (alone, and with Ctrl, Alt or Shift) in one of the profiles that
-* apply to the current job. Drawn in the VanaCore style (style.lua).
+* JobBinds window. The Keys page: a visual keyboard to pick a key, and an
+* editor for what the key runs (alone, and with Ctrl, Alt or Shift) in one of
+* the profiles that apply to the current job. The Hotbars page: the bars on
+* screen (hotbar_page.lua). Drawn in the VanaCore style (style.lua).
 --]]
 
 require('common');
@@ -9,11 +10,15 @@ local imgui = require('imgui');
 local blocked_keybinds = require('blocked_keybinds');
 local profiles = require('profiles');
 local style = require('style');
+local hotbar_page = require('hotbar_page');
 
 local P, S, mix = style.P, style.S, style.mix;
 
 local keyboard_ui = {};
 keyboard_ui.is_open = { false };
+keyboard_ui.page = 'keys'; -- or 'hotbars'
+
+local PAGES, PAGE_LABELS = { 'keys', 'hotbars' }, { 'Keys', 'Hotbars' };
 
 -- Virtual keyboard layout definition: { label, width }. Each row's last key is
 -- the Ins/Del/Home/End column; the one before it is stretched to meet it.
@@ -324,7 +329,8 @@ local function draw_editor(dl, plan, x, y, right)
     end
 end
 
--- The panel (ImGui draws none of it), then everything in it
+-- The panel (ImGui draws none of it), then everything in it. plan is the
+-- page's: the Keys page's editor, or hotbar_page's rows.
 local function draw_window(plan, pw, ph)
     local m, pad = S(MARGIN), S(PAD);
     local x, y = imgui.GetCursorScreenPos();
@@ -334,9 +340,15 @@ local function draw_window(plan, pw, ph)
     style.fill(dl, x, y, pw, ph, P.bg, S(5));
     style.outline(dl, x, y, pw, ph, P.border, S(5));
 
-    -- Title bar
+    -- Title bar: the name, the pages, a cross
     local cy = y + S(TITLE_H) / 2;
     style.text_mid(dl, x + pad, cy, 'JobBinds', P.white, style.fonts.semi, S(style.BODY));
+    local pages_x = x + pad + style.measure('JobBinds', style.fonts.semi, S(style.BODY)) + S(16);
+    local index = keyboard_ui.page == 'hotbars' and 2 or 1;
+    local picked, changed = style.segments('##jb_page', pages_x, cy, PAGE_LABELS, index);
+    if changed then
+        keyboard_ui.page = PAGES[picked];
+    end
     local box = S(21);
     if style.cross('##jb_close', x + pw - pad - box / 2 + S(4), cy, box) then
         keyboard_ui.is_open[1] = false;
@@ -345,6 +357,10 @@ local function draw_window(plan, pw, ph)
     style.line(dl, x, y + S(TITLE_H), x + pw, y + S(TITLE_H), P.border);
 
     local left, right = x + pad, x + pw - pad;
+    if index == 2 then
+        hotbar_page.draw(dl, plan, left, y + S(TITLE_H), right, x, x + pw);
+        return;
+    end
     y = y + S(TITLE_H) + S(BLOCK_GAP);
     draw_keyboard(dl, left, y, right - left);
     y = y + keyboard_height() + S(BLOCK_GAP);
@@ -357,16 +373,22 @@ local WINDOW_FLAGS = ImGuiWindowFlags_NoTitleBar + ImGuiWindowFlags_NoResize + I
     + ImGuiWindowFlags_NoScrollWithMouse + ImGuiWindowFlags_NoCollapse + ImGuiWindowFlags_NoBackground
     + ImGuiWindowFlags_NoNavInputs; -- NoNavInputs: Tab is the game's (target cycling), not ImGui's
 
--- Main render function
+-- Main render function. Called after style.frame(), and style.tooltips() after it.
 function keyboard_ui.render()
     if not keyboard_ui.is_open[1] then
         return;
     end
 
-    style.frame();
-    local plan, editor_h = plan_editor();
+    local plan, ph;
+    if keyboard_ui.page == 'hotbars' then
+        plan = hotbar_page.plan(S(INNER_W));
+        ph = S(TITLE_H) + plan.h;
+    else
+        local editor_h;
+        plan, editor_h = plan_editor();
+        ph = S(TITLE_H) + S(BLOCK_GAP) + keyboard_height() + S(BLOCK_GAP) + editor_h;
+    end
     local m, pw = S(MARGIN), S(INNER_W) + S(PAD) * 2;
-    local ph = S(TITLE_H) + S(BLOCK_GAP) + keyboard_height() + S(BLOCK_GAP) + editor_h;
 
     local screen_w, screen_h = style.screen();
     imgui.SetNextWindowPos({ screen_w / 2, screen_h / 2 }, ImGuiCond_FirstUseEver, { 0.5, 0.5 });
@@ -382,7 +404,6 @@ function keyboard_ui.render()
     end
     imgui.End();
     imgui.PopStyleVar(3);
-    style.tooltips();
 
     if not ok then
         keyboard_ui.is_open[1] = false; -- not drawn again until /jb reopens it
@@ -397,6 +418,17 @@ end
 
 function keyboard_ui.toggle()
     keyboard_ui.is_open[1] = not keyboard_ui.is_open[1];
+end
+
+-- Open the window, on a page ('keys' or 'hotbars') when one is given
+function keyboard_ui.open(page)
+    keyboard_ui.is_open[1] = true;
+    keyboard_ui.page = page or keyboard_ui.page;
+end
+
+-- The Hotbars page is open: the bars on screen are being edited
+function keyboard_ui.editing_hotbars()
+    return keyboard_ui.is_open[1] == true and keyboard_ui.page == 'hotbars';
 end
 
 -- The profiles that apply now and the bindings in force. changed() is called

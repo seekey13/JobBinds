@@ -9,6 +9,7 @@
 local engine = {};
 
 local active = {}; -- the bindings on keys right now; a key runs active[n]
+local index = {};  -- chord id -> n, for a hotbar slot to run its key's binding
 local runs = {};   -- n -> { lines, pos, at }: bindings part way through their commands
 
 local function queue(command)
@@ -21,6 +22,7 @@ function engine.clear()
         queue('/unbind ' .. binding.id);
     end
     active = {};
+    index = {};
     runs = {};
 end
 
@@ -29,6 +31,7 @@ function engine.apply(bindings)
     engine.clear();
     for n, binding in ipairs(bindings) do
         queue(('/bind %s /jobbinds run %d'):format(binding.id, n));
+        index[binding.id] = n;
     end
     active = bindings;
 end
@@ -66,6 +69,16 @@ function engine.run(n)
     end
     local run = { lines = binding.lines, pos = 1, at = 0 };
     runs[n] = step(run, os.clock()) and run or nil;
+end
+
+-- Run what a key is bound to, as pressing it would (a hotbar slot was clicked).
+-- False when nothing is bound to it now.
+function engine.press(chord_id)
+    local n = chord_id and index[chord_id];
+    if n then
+        engine.run(n);
+    end
+    return n ~= nil;
 end
 
 -- Call every frame: carries on the bindings that are waiting.

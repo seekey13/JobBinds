@@ -1,7 +1,8 @@
 # JobBinds
 
 JobBinds is an Ashita v4 addon for Final Fantasy XI that gives every job its own key bindings. Pick a key on a visual
-keyboard, type what it should do, and the binding follows you whenever you change job or subjob.
+keyboard, type what it should do, and the binding follows you whenever you change job or subjob. Hotbars put your keys
+on screen, with what each one runs and a countdown while its ability or spell recasts.
 
 ## What's new in 2.0
 
@@ -74,12 +75,49 @@ Four profiles apply to any job combination. When two bind the same key, the one 
 
 The editor notes under a row when another profile supplies or overrides that key.
 
+### Hotbars
+
+A hotbar is a row, column or grid of slots on screen. Each slot shows a key, a label for what the key runs, and while
+an ability or spell the key uses is recasting, a dark fade with the seconds left. Click a slot to run its key.
+
+Open the **Hotbars** page at the top of the window (or type `/jb bars`) and click **New bar**. While the page is open
+every bar is shown with a tab above it: drag the tab to move the bar, and click a slot to edit it.
+
+- **Bar**: its name, how many slots (up to 40), how many columns (one column per slot for a single row, one column for a
+  single column, anything in between for a grid), and the slot size.
+- **Slot**: the key it shows, written as in the profile files (`1`, `^G` for Ctrl+G, `!C` for Alt+C, `+1` for Shift+1).
+  The slot runs whatever that key is bound to for your current job, so one bar works for every job.
+- **Label**: leave it empty to take the name from the key's commands (`/ma Holy <t>` shows *Holy*), or type your own.
+- **Recasts**: **Auto** takes the recasts of the abilities and spells the key's commands use. Search to pick your own
+  instead (one or several: the slot shows the longest), or pick **None**.
+
+A new bar starts on the keys 1 to 0, the next on Shift+1 to Shift+0.
+
+#### Shown when
+
+A bar with no conditions is always shown. Add conditions to show it only at times; with several, all must hold.
+
+| Condition | Shows the bar while |
+|-----------|---------------------|
+| TP, HP%, MP% | the value is at least, or below, a number (e.g. TP at least 1000) |
+| Ctrl, Alt, Shift | the key is held, or not held |
+| Engaged | you are engaged, or not |
+| Buff | a status is on you (Up), or isn't (Missing), by name: *Haste*, *Sneak Attack* |
+
+For example, a bar on `+1` to `+0` shown while Shift is held, over a bar on `1` to `0` shown while Shift isn't, swaps
+the two as you hold Shift.
+
+Hotbars are saved as you change them, in `Ashita/config/addons/jobbinds/hotbars.lua`, for every character. Run
+`/jb reload` after editing that file by hand. Abilities with charges (Stratagems, Quick Draw, Ready) show their timer
+as the game keeps it, not their charges.
+
 ### Commands
 
 | Command | |
 |---------|---|
 | `/jb` or `/jobbinds` | Open or close the window |
-| `/jb reload` | Read the profile files again after editing them by hand |
+| `/jb bars` | Open the window on its Hotbars page |
+| `/jb reload` | Read the profile and hotbar files again after editing them by hand |
 | `/jb import` | Import JobBinds 1.x profiles from the scripts folder |
 
 ### Profile files
@@ -138,6 +176,13 @@ MIT License. See [LICENSE](LICENSE) for details.
 Open an issue or pull request on the [GitHub repository](https://github.com/seekey13/jobbinds).
 
 ## Changelog
+
+### Version 2.1
+- Hotbars: rows, columns or grids of your keys on screen, moved by dragging
+- Slots take their label and recasts from what the key runs for the current job, or set their own
+- Recast countdowns: a fade and the seconds left, for one or more abilities and spells per slot
+- Conditions to show a bar only at times: TP, HP%, MP%, Ctrl/Alt/Shift held, engaged, a buff up or missing
+- Click a slot to run its key
 
 ### Version 2.0
 - Rewritten from scratch
