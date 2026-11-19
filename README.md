@@ -1,40 +1,17 @@
 # JobBinds
 
-JobBinds is an Ashita v4 addon for Final Fantasy XI that automatically loads keybind profile scripts based on your current job and subjob, featuring a built-in graphical configuration interface for managing your keybinds.
+JobBinds is an Ashita v4 addon for Final Fantasy XI that gives every job its own key bindings. Pick a key on a visual
+keyboard, type what it should do, and the binding follows you whenever you change job or subjob.
 
-> **Note:**  
-> This addon is designed for **Ashita v4** and expects your keybind profile scripts to be placed in the `Ashita/scripts` directory.  
-> Each profile must be named in the format `JOB_SUB.txt` (e.g., `WAR_NIN.txt`).  
-> No fallback or default profile is loaded if a job/subjob combination is missing.
+## What's new in 2.0
 
-## Quick Setup
-### Click any key to configure bindings
-<img width="518" height="224" alt="image" src="https://github.com/user-attachments/assets/b82859b1-f3f0-4b82-8125-8ae065ee0d09" />
+2.0 is a rewrite. The idea is the same; how it works is not.
 
-### If you only have a single command just type it in and click save
-<img width="515" height="312" alt="image" src="https://github.com/user-attachments/assets/9652e4b2-0aff-4bb5-bb95-74cb1522cfdb" />
-
-### Enable the Macro checkbox to expand multiline binding, command name will be listed as a tooltip, scroll a list of other bindings in your `scripts` folder
-<img width="524" height="424" alt="image" src="https://github.com/user-attachments/assets/7f00c4f8-284c-4597-93f8-d89df085e3d4" />
-
-
-### Some keys do not have conflicting system functions and can bind Ctrl & Alt
-<img width="523" height="379" alt="image" src="https://github.com/user-attachments/assets/a917ecd3-188a-4aa3-855a-67e6b94c4745" />
-
-### Keys with Compact game function are disabled.
-
-## Features
-
-- **Automatic Profile Switching:** Loads the correct keybind profile when you change jobs
-- **Visual Keyboard Interface:** Interactive keyboard layout with color-coded keys (green=selected, standard=bound, gray=unbound, red=blocked)
-- **Script Browser:** Browse and load existing macros with automatic filtering of job profiles
-- **Filename Validation:** Real-time validation prevents invalid Windows filename characters
-- **Key Tooltips:** Hover over bound keys to see their commands
-- **Multi-Modifier Support:** Configure up to 4 bindings per key (base, Ctrl, Alt, Shift)
-- **Quick Clear:** Remove individual bindings with one-click Clear buttons
-- **Profile Display:** Shows current job/subjob combination in the interface
-
----
+- **No more script files.** 1.x kept each profile and each macro as a `/exec` script in `Ashita/scripts`. 2.0 runs
+  bindings itself: a macro is just several lines typed into the editor, with nothing to name and no files to manage.
+- **Profiles stack.** A binding can be global, or apply to a main job with any subjob, to a subjob under any main job,
+  or to one exact combination. Bind your BLM nukes once instead of once per subjob.
+- **Your 1.x profiles are imported** the first time 2.0 loads (see [Upgrading from 1.x](#upgrading-from-1x)).
 
 ## Installation
 
@@ -44,147 +21,136 @@ JobBinds is an Ashita v4 addon for Final Fantasy XI that automatically loads key
     git clone https://github.com/seekey13/jobbinds.git
     ```
 
-2. Start or restart Ashita.
-3. Load the addon in-game:
+2. Load the addon in-game (add the line to `scripts/default.txt` to load it every time):
 
     ```
     /addon load jobbinds
     ```
-4. Open the in-game configuration:
+
+3. Open the window:
 
     ```
     /jb
     ```
----
 
 ## Usage
 
-JobBinds runs automatically in the background. When you change jobs or subjobs, it will unbind the previous profile's keys and load the new profile.
+### Binding a key
+
+1. Click a key on the keyboard. Keys the game needs are faded and can't be picked.
+2. Choose the profile the binding belongs to, at the bottom left of the window (see below). It starts on your exact job/subjob.
+3. Type a command next to the key, or next to `Ctrl +`, `Alt +` or `Shift +` the key.
+4. Click **Save**. The key works straight away.
+
+**Delete** removes the key's bindings from the selected profile. The `X` beside a row empties just that row (then Save).
+
+Key colours: outlined in blue is the key you're editing, a raised lighter key is one that's bound, a dark sunken key
+is free, a faded one is protected. Hover a bound key to see what it runs and which profile that comes from.
+
+### Macros
+
+Turn on **Macro** on a row to get a multi-line box. Each line is one command, sent in order:
+
+```
+/ja "Sneak Attack" <me>
+/wait 1.1
+/ws "Viper Bite" <t>
+```
+
+- `/wait 2` on its own line pauses for 2 seconds (fractions are fine).
+- A trailing `<wait 2>`, as in the game's own macros, pauses after that line.
+- Pressing the key again while its macro is still waiting starts it over.
+
+### Profiles
+
+Four profiles apply to any job combination. When two bind the same key, the one lower in this table wins:
+
+| Profile | Applies to | File |
+|---------|------------|------|
+| Any/NIN | any main job with that subjob | `SUB_NIN.txt` |
+| BLM/Any | that main job with any subjob | `BLM.txt` |
+| BLM/NIN | exactly that combination | `BLM_NIN.txt` |
+| Global | every job, overriding the job profiles | `ALL.txt` |
+
+The editor notes under a row when another profile supplies or overrides that key.
 
 ### Commands
 
-- `/jb` or `/jobbinds` - Opens the configuration window
+| Command | |
+|---------|---|
+| `/jb` or `/jobbinds` | Open or close the window |
+| `/jb reload` | Read the profile files again after editing them by hand |
+| `/jb import` | Import JobBinds 1.x profiles from the scripts folder |
 
-### Configuration Interface
+### Profile files
 
-Access the keyboard interface with `/jb` or `/jobbinds`:
-
-- **Visual Keyboard:** Click any key to configure bindings
-- **Color Coding:** Green (selected), standard (bound), gray (unbound), dark red (blocked)
-- **Tooltips:** Hover over keys to see bound commands
-- **Binding Editor:** Configure up to 4 modifier combinations per key
-- **Script List:** Browse and load existing macros (filters out job profiles)
-- **Validation:** Red text indicates invalid filename characters; Save button disabled until fixed
-- **Clear Buttons:** Remove individual bindings without deleting entire key
-- **Profile Display:** Current job/subjob shown after Delete button
-
-### Keybind Profiles
-
-- **Naming Convention:**  
-  Profile scripts must be named as `JOB_SUB.txt`, e.g., `WAR_NIN.txt`, `BLM_RDM.txt`
-- **Location:**  
-  Place scripts in `Ashita/scripts/`
-- **Contents:**  
-  Use Ashita's `/bind` commands in your scripts.  
-  Example:
-  ```
-  /bind ^F1 /wave
-  /bind ^1 /attack
-  /bind +F2 /exec macro_heal
-  ```
-- **Modifier Keys:**  
-  - `^` = Ctrl
-  - `!` = Alt  
-  - `+` = Shift
-
-### Blocked Keys
-
-Essential game keys are protected from being bound:
-
-**Movement & Interface:** `W` `A` `S` `D` `F` `V` `R` `Y` `H` `I` `J` `K` `L` `N`  
-**Navigation:** Arrow keys, `TAB`, `ENTER`, `SPACE`, `ESCAPE`  
-**Function Keys:** `F1` through `F12`  
-**System Keys:** Modifier keys and system shortcuts
-
-Some keys like `B` `E` `M` `Q` `T` `U` `X` and numbers can be used alone or with Shift, but not with Ctrl/Alt.
-
----
-
-## Output
-
-JobBinds provides color-coded chat messages:
+Profiles are plain text in `Ashita/config/addons/jobbinds/`, so they're easy to back up, share or edit. A key on its own
+line, then its commands indented beneath it:
 
 ```
-[JobBinds] Loaded jobbinds profile: WAR_NIN.txt
-[JobBinds] Job change detected: WAR/NIN -> BLM/RDM
-[JobBinds] ERROR: Profile BLM_RDM.txt not found.
-[JobBinds] [DEBUG] Found bindable key: ^F1
+# BLM_NIN.txt
+^G
+    /ma "Utsusemi: Ichi" <me>
++Q
+    /ja "Elemental Seal" <me>
+    /wait 1
+    /ma "Sleepga II" <t>
 ```
 
----
+Key prefixes: `^` Ctrl, `!` Alt, `+` Shift. Run `/jb reload` after editing a file while the game is running.
 
-## Advanced Script Features (Ashita v4)
+### Protected keys
 
-Scripts may use argument tokens (`%0%`) and `/include` directives. See [Ashita v4 documentation](https://www.ashitaxi.com/) for details.
+Keys the game uses can't be bound:
 
----
+**Movement and menus:** `W` `A` `S` `D` `F` `V` `R` `Y` `H` `I` `J` `K` `L` `N` `,` `.` `/` `-`  
+**Navigation:** arrow keys, `Tab`, `Enter`, `Space`, `Escape`, `Backspace`, `Page Up`, `Page Down`  
+**Function keys:** `F1` to `F12`
+
+`B` `E` `M` `Q` `T` `U` `X` and the number keys can be bound alone or with Shift, but not with Ctrl or Alt. A protected
+key written into a profile file by hand is ignored.
+
+## Upgrading from 1.x
+
+The first time 2.0 loads it reads your old `scripts/JOB_SUB.txt` profiles, and the global `scripts/JobBinds.txt` if you
+had one, and writes each as a 2.0 profile, with the
+contents of any macro file a key `/exec`'d copied into the binding. Nothing in the scripts folder is changed or
+removed; once you're happy, the old profile and macro files can be deleted. `/jb import` runs the import again and never
+replaces a 2.0 profile that already exists.
+
+An imported profile lands on its exact job/subjob. To share bindings across subjobs, move them to the main job's
+profile (for example from `BLM_NIN.txt` to `BLM.txt`) in the window or in the files.
 
 ## Compatibility
 
 - **Ashita v4** (required)
 
----
-
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
 
----
-
 ## Credits
 
 - Author: Seekey
-- Inspired by the need for job-based keybind management.
-
----
 
 ## Support
 
-Open an issue or pull request on the [GitHub repository](https://github.com/seekey13/jobbinds) for suggestions or problems.
-
----
+Open an issue or pull request on the [GitHub repository](https://github.com/seekey13/jobbinds).
 
 ## Changelog
 
-### Version 1.0 (Current)
-- Visual keyboard interface with interactive key selection
-- Color-coded keyboard keys with status tooltips
-- Script browser with automatic job profile filtering
-- Filename validation for macros with visual feedback
-- Clear buttons for individual bindings
-- Profile/job combination display
-- Multi-modifier support (base, Ctrl, Alt, Shift per key)
-- Removed legacy configuration UI
+### Version 2.0
+- Rewritten from scratch
+- Bindings run by the addon: no `/exec` scripts or macro files
+- Stacking profiles: subjob, main job, exact job/subjob, global
+- Multi-line macros with `/wait` typed straight into the editor
+- Plain-text profiles in `config/addons/jobbinds`
+- Automatic import of 1.x profiles
+- Job changes detected by watching the job itself rather than packets
+- Keys are released when the addon unloads
 
-### Version 0.4
-- Enhanced messaging system with color-coded chat output
-- Comprehensive key blocking with real-time validation
-- Code consolidation and improved maintainability
-- Better error handling and debug output
+### Version 1.0
+- Visual keyboard interface, script browser, multi-modifier support
 
-### Version 0.3
-- Added graphical configuration interface with ImGui
-- Real-time keybind editing and macro support
-- Instant profile loading and debug mode
-- Enhanced error handling
-
-### Version 0.2
-- Improved packet monitoring for job changes
-- Enhanced key tracking and unbinding
-- Better error handling with pcall wrappers
-
-### Version 0.1
-- Initial release with automatic profile loading/unloading
-- Per-job/subjob keybind management
-- Key blacklist enforcement
-- Basic error handling
+### Versions 0.1 to 0.4
+- Automatic profile loading by job/subjob, key blacklist, first configuration interface

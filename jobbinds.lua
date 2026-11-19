@@ -1,260 +1,129 @@
 --[[
 * JobBinds
-* Automatically loads keybind profile scripts based on current job and subjob.
+* Key bindings that follow your job and subjob, edited on a visual keyboard.
 * Copyright (c) 2025 Seekey
-
+*
 * This addon is designed for Ashita v4.
 --]]
 
 addon.name      = 'JobBinds';
 addon.author    = 'Seekey';
-addon.version   = '1.0';
-addon.desc      = 'Automatically loads keybind profile scripts based on current job/subjob.';
+addon.version   = '2.0';
+addon.desc      = 'Key bindings that follow your job and subjob.';
 addon.link      = 'https://github.com/seekey13/jobbinds';
 
 require('common');
-local chat = require('chat')
+local chat = require('chat');
+local profiles = require('profiles');
+local engine = require('engine');
 local keyboard_ui = require('keyboard_ui');
-local blocked_keybinds = require('blocked_keybinds');
+local import = require('import');
 
--- Use the blocked_keybinds module for consistency
-local KEY_BLACKLIST = blocked_keybinds.blocked;
+local function printf(fmt, ...) print(chat.header(addon.name) .. chat.message(fmt:format(...))); end
 
--- Custom print functions for categorized output.
-local function printf(fmt, ...)  print(chat.header(addon.name) .. chat.message(fmt:format(...))) end
-local function warnf(fmt, ...)   print(chat.header(addon.name) .. chat.warning(fmt:format(...))) end
-local function errorf(fmt, ...)  print(chat.header(addon.name) .. chat.error  (fmt:format(...))) end
-local function debugf(fmt, ...) 
-    if debug_mode then
-        print(chat.header(addon.name) .. chat.message('[DEBUG] ' .. fmt:format(...))) 
+local POLL_SECONDS = 0.5;
+
+local applied_main, applied_sub = nil, nil; -- the job ids the keys are bound for
+local seen_main, seen_sub = nil, nil;       -- the job ids at the last poll
+local next_poll = 0;
+
+local function job_name(id)
+    if id == nil or id == 0 then
+        return nil;
+    end
+    local name = AshitaCore:GetResourceManager():GetString('jobs.names_abbr', id);
+    return (name ~= nil and name ~= '') and name:upper() or nil;
+end
+
+-- Bind the keys for the applied job from its profiles, and show them in the window.
+local function refresh()
+    local main, sub = job_name(applied_main), job_name(applied_sub);
+    local scopes = profiles.scopes(main, sub);
+    local bindings = main and profiles.effective(scopes) or {};
+    engine.apply(bindings);
+    keyboard_ui.set_context(scopes, bindings, refresh);
+    return #bindings, main, sub;
+end
+
+-- The job is read twice a second and acted on once it reads the same twice
+-- running, so a half-updated job during a change or a zone is never applied.
+local function poll_job()
+    local player = AshitaCore:GetMemoryManager():GetPlayer();
+    if not player then
+        return;
+    end
+    local main, sub = player:GetMainJob(), player:GetSubJob();
+    local settled = main == seen_main and sub == seen_sub;
+    seen_main, seen_sub = main, sub;
+    if not settled or (main == applied_main and sub == applied_sub) then
+        return;
+    end
+
+    applied_main, applied_sub = main, sub;
+    local count, main_name, sub_name = refresh();
+    if main_name then
+        printf('%s/%s: %d key%s bound.', main_name, sub_name or 'NON', count, count == 1 and '' or 's');
     end
 end
 
--- Holds the last loaded job/subjob profile info
-local last_job = nil
-local last_subjob = nil
-local last_profile_keys = {}
-
--- Debug mode flag (off by default)
-local debug_mode = false
-
--- Helper: Get current job and subjob
-local function get_current_jobs()
-    local ok, party = pcall(function() return AshitaCore:GetMemoryManager():GetParty() end)
-    if not ok or not party then
-        errorf('Failed to get party info for job detection.')
-        return nil, nil
-    end
-    local okj, job = pcall(function() return party:GetMemberMainJob(0) end)
-    local oksj, subjob = pcall(function() return party:GetMemberSubJob(0) end)
-    if not okj or not oksj then
-        errorf('Failed to get job/subjob from party object.')
-        return nil, nil
-    end
-    debugf('Current jobs detected: Main=%d, Sub=%d', job, subjob)
-    return job, subjob
+local function run_import()
+    local imported, skipped = import.run();
+    printf('Imported %d JobBinds 1.x profile%s from the scripts folder%s.', imported, imported == 1 and '' or 's',
+        skipped > 0 and (' (%d already existed)'):format(skipped) or '');
+    refresh();
 end
 
--- Helper: Get job/subjob short names (WAR, NIN, etc.)
-local function get_job_shortname(jobid)
-    local ok, name = pcall(function() return AshitaCore:GetResourceManager():GetString('jobs.names_abbr', jobid) end)
-    if ok and name then
-        return name:upper()
-    end
-    return tostring(jobid)
-end
-
--- Helper: Build profile filename (e.g., WAR_NIN.txt)
-local function get_profile_filename(jobid, subjobid)
-    local job = get_job_shortname(jobid)
-    local subjob = get_job_shortname(subjobid)
-    return string.format('%s_%s.txt', job, subjob)
-end
-
--- Helper: Full path to profile
-local function get_profile_path(jobid, subjobid)
-    local filename = get_profile_filename(jobid, subjobid)
-    return string.format('%s/scripts/%s', AshitaCore:GetInstallPath(), filename)
-end
-
--- Helper: Read profile keys from .txt file
-local function read_profile_keys(profile_path)
-    debugf('Reading profile keys from: %s', profile_path)
-    local ok, lines = pcall(function() return io.lines(profile_path) end)
-    if not ok or not lines then
-        debugf('Failed to read profile file: %s', profile_path)
-        return nil
-    end
-    local keys = {}
-    for line in lines do
-        local b = line:match('^/bind%s+([!@#%^+%w]+)')
-        if b and not KEY_BLACKLIST[b] then
-            keys[#keys+1] = b
-            debugf('Found bindable key: %s', b)
-        elseif b and KEY_BLACKLIST[b] then
-            debugf('Skipped blacklisted key: %s', b)
+ashita.events.register('load', 'jobbinds_load', function ()
+    keyboard_ui.load(); -- the window's fonts, before any frame
+    -- First run of 2.0: bring the 1.x profiles along
+    if not ashita.fs.exists(profiles.dir) then
+        local imported = import.run();
+        if imported > 0 then
+            printf('Imported %d JobBinds 1.x profile%s from the scripts folder.', imported, imported == 1 and '' or 's');
         end
     end
-    debugf('Total keys found: %d', #keys)
-    return keys
-end
+    refresh();
+end);
 
--- Unbind previous job profile keys
-local function unload_profile(keys)
-    if not keys then 
-        debugf('No keys to unbind')
-        return 
+ashita.events.register('unload', 'jobbinds_unload', function ()
+    engine.clear();
+end);
+
+ashita.events.register('d3d_present', 'jobbinds_present', function ()
+    local now = os.clock();
+    if now >= next_poll then
+        next_poll = now + POLL_SECONDS;
+        poll_job();
     end
-    debugf('Unbinding %d keys', #keys)
-    for _, key in ipairs(keys) do
-        debugf('Unbinding key: %s', key)
-        local ok = pcall(function()
-            AshitaCore:GetChatManager():QueueCommand(-1, string.format('/unbind %s', key))
-        end)
-        if not ok then
-            errorf("Failed to unbind key: %s", key)
-        end
-    end
-    printf('Previous job/subjob binds unloaded.')
-end
+    engine.tick();
+    keyboard_ui.render();
+end);
 
--- Helper: Get safe job name for display (handles nil values)
-local function get_safe_job_name(jobid)
-    return jobid and get_job_shortname(jobid) or 'nil'
-end
-
--- Load new profile via /exec
-local function load_profile(jobid, subjobid)
-    local profile_path = get_profile_path(jobid, subjobid)
-    local profile_filename = get_profile_filename(jobid, subjobid)
-    debugf('Attempting to load profile: %s', profile_path)
-    
-    -- Ensure file exists
-    local file = io.open(profile_path, "r")
-    if not file then
-        errorf('Profile %s not found.', profile_path)
-        debugf('Profile file does not exist at: %s', profile_path)
-        return false
-    end
-    file:close()
-    debugf('Profile file exists, executing: %s', profile_filename)
-    
-    local ok = pcall(function()
-        AshitaCore:GetChatManager():QueueCommand(-1, string.format('/exec %s', profile_filename))
-    end)
-    if ok then
-        printf('Loaded jobbinds profile: %s', profile_filename)
-        keyboard_ui.set_current_profile(profile_filename)
-        keyboard_ui.load_profile(profile_path)
-        debugf('Successfully loaded and updated UI with profile: %s', profile_filename)
-        return true
-    else
-        errorf('Failed to load profile: %s', profile_filename)
-        return false
-    end
-end
-
--- Helper: Load profile and track keys for future unload
-local function load_and_track_profile(jobid, subjobid)
-    local profile_path = get_profile_path(jobid, subjobid)
-    local loaded = load_profile(jobid, subjobid)
-    if loaded then
-        last_profile_keys = read_profile_keys(profile_path)
-    end
-    return loaded
-end
-
--- Handle job change logic
-local function handle_job_change()
-    local jobid, subjobid = get_current_jobs()
-    if not jobid or not subjobid then return end
-    if jobid == last_job and subjobid == last_subjob then
-        return
-    end
-    
-    printf('Job change detected: %s/%s -> %s/%s', 
-           get_safe_job_name(last_job),
-           get_safe_job_name(last_subjob),
-           get_safe_job_name(jobid), 
-           get_safe_job_name(subjobid))
-    
-    -- Unload previous profile
-    unload_profile(last_profile_keys)
-    keyboard_ui.set_current_profile(nil)
-    keyboard_ui.load_profile(nil)
-    
-    -- Update job tracking
-    last_job, last_subjob = jobid, subjobid
-    last_profile_keys = nil
-
-    -- Load new profile immediately
-    load_and_track_profile(jobid, subjobid)
-end
-
--- Initial load event
-ashita.events.register('load', 'jobbinds_load', function()
-    -- Populate initial job/subjob and load profile
-    local jobid, subjobid = get_current_jobs()
-    last_job, last_subjob = jobid, subjobid
-    if jobid and subjobid then
-        load_and_track_profile(jobid, subjobid)
-    end
-end)
-
--- Listen for job/subjob change packets (0x1B, 0x44 most common for job change)
-ashita.events.register('packet_in', 'jobbinds_packet_in', function(e)
-    -- 0x1B = job info, 0x44 = character update, 0x1A = party update; all candidates
-    if (e.id == 0x1B or e.id == 0x44 or e.id == 0x1A) then
-        debugf('Received packet 0x%02X, scheduling job change check', e.id)
-        ashita.tasks.once(0.5, function()
-            handle_job_change()
-        end)
-    end
-end)
-
--- Command handler for /jobbinds and /jb
-ashita.events.register('command', 'jobbinds_command', function(e)
-    local args = e.command:args()
+ashita.events.register('command', 'jobbinds_command', function (e)
+    local args = e.command:args();
     if #args == 0 then
-        return
+        return;
     end
-    
-    local cmd = args[1]:lower()
-    if cmd ~= '/jobbinds' and cmd ~= '/jb' then
-        return
+    local command = args[1]:lower();
+    if command ~= '/jobbinds' and command ~= '/jb' then
+        return;
     end
-    
-    e.blocked = true
-    
-    if #args == 1 then
-        -- No additional arguments, show the keyboard UI
-        keyboard_ui.show()
-        printf('Opening JobBinds keyboard interface.')
-    elseif #args == 2 and args[2]:lower() == 'debug' then
-        -- Toggle debug mode
-        debug_mode = not debug_mode
-        keyboard_ui.set_debug_mode(debug_mode)  -- Update keyboard UI debug mode
-        printf('Debug mode %s.', debug_mode and 'enabled' or 'disabled')
-        if debug_mode then
-            debugf('Debug information will now be displayed.')
-            debugf('Current state: last_job=%s, last_subjob=%s', 
-                   get_safe_job_name(last_job),
-                   get_safe_job_name(last_subjob))
-            debugf('Profile keys tracked: %d', last_profile_keys and #last_profile_keys or 0)
-        end
+    e.blocked = true;
+
+    local action = args[2] and args[2]:lower() or nil;
+    if action == nil then
+        keyboard_ui.toggle();
+    elseif action == 'run' then
+        engine.run(tonumber(args[3])); -- what the bound keys send
+    elseif action == 'reload' then
+        profiles.reload();
+        local count = refresh();
+        printf('Profiles reloaded: %d key%s bound.', count, count == 1 and '' or 's');
+    elseif action == 'import' then
+        run_import();
     else
-        -- Handle unknown commands
-        printf('Usage: /jobbinds [debug]  (or /jb)')
-        printf('  /jobbinds       - Open keyboard interface')
-        printf('  /jb             - Shortcut for /jobbinds')
-        printf('  /jobbinds debug - Toggle debug information')
+        printf('/jb         - open or close the keyboard window');
+        printf('/jb reload  - read the profile files again after editing them by hand');
+        printf('/jb import  - import JobBinds 1.x profiles from the scripts folder');
     end
-end)
-
--- Render loop for ImGui
-ashita.events.register('d3d_present', 'jobbinds_render', function()
-    keyboard_ui.render()
-end)
-
--- Startup message
-printf('JobBinds v%s by %s loaded. Profiles will auto-load on job/subjob change.', addon.version, addon.author)
+end);

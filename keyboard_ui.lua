@@ -1,780 +1,427 @@
+--[[
+* JobBinds window: a visual keyboard to pick a key, and an editor for what the
+* key runs (alone, and with Ctrl, Alt or Shift) in one of the profiles that
+* apply to the current job. Drawn in the VanaCore style (style.lua).
+--]]
+
 require('common');
-local chat = require('chat');
 local imgui = require('imgui');
-local vk_codes = require('vk_codes');
 local blocked_keybinds = require('blocked_keybinds');
-local ui_functions = require('ui_functions');
+local profiles = require('profiles');
+local style = require('style');
 
--- Custom print functions
-local function printf(fmt, ...) print(chat.header('JobBinds') .. chat.message(fmt:format(...))) end
-local function errorf(fmt, ...) print(chat.header('JobBinds') .. chat.error(fmt:format(...))) end
+local P, S, mix = style.P, style.S, style.mix;
 
--- UI state variables
 local keyboard_ui = {};
 keyboard_ui.is_open = { false };
-keyboard_ui.selected_binding = -1;
-keyboard_ui.binding_key = { '' };
 
--- Separate state for each modifier combination
-keyboard_ui.command_text_none = { '' };
-keyboard_ui.is_macro_none = { false };
-keyboard_ui.macro_text_none = { '' };
-
-keyboard_ui.command_text_ctrl = { '' };
-keyboard_ui.is_macro_ctrl = { false };
-keyboard_ui.macro_text_ctrl = { '' };
-
-keyboard_ui.command_text_alt = { '' };
-keyboard_ui.is_macro_alt = { false };
-keyboard_ui.macro_text_alt = { '' };
-
-keyboard_ui.command_text_shift = { '' };
-keyboard_ui.is_macro_shift = { false };
-keyboard_ui.macro_text_shift = { '' };
-
--- Script list state
-keyboard_ui.available_scripts = {};
-keyboard_ui.selected_script_index = { 0 };
-keyboard_ui.last_scripts_refresh = 0;
-
-keyboard_ui.current_profile = 'No Profile Loaded';
-keyboard_ui.is_binding = false;
-keyboard_ui.debug_mode = false;
-keyboard_ui.error_message = '';
-
--- Current bindings loaded from profile file
-local current_bindings = {};
-local current_profile_path = nil;
-
--- Virtual keyboard layout definition
+-- Virtual keyboard layout definition: { label, width }. Each row's last key is
+-- the Ins/Del/Home/End column; the one before it is stretched to meet it.
 local keyboard_layout = {
     -- Row 1: Number row
     {
-        {'`', 26}, {'1', 26}, {'2', 26}, {'3', 26}, {'4', 26}, {'5', 26}, {'6', 26}, 
-        {'7', 26}, {'8', 26}, {'9', 26}, {'0', 26}, {'-', 26}, {'=', 26}, {'<--', 51}
+        {'`', 26}, {'1', 26}, {'2', 26}, {'3', 26}, {'4', 26}, {'5', 26}, {'6', 26},
+        {'7', 26}, {'8', 26}, {'9', 26}, {'0', 26}, {'-', 26}, {'=', 26}, {'<--', 51}, {'INS', 51}
     },
     -- Row 2: QWERTY row
     {
-        {'TAB', 38}, {'Q', 26}, {'W', 26}, {'E', 26}, {'R', 26}, {'T', 26}, {'Y', 26}, 
-        {'U', 26}, {'I', 26}, {'O', 26}, {'P', 26}, {'[', 26}, {']', 26}, {'\\', 38}
+        {'TAB', 38}, {'Q', 26}, {'W', 26}, {'E', 26}, {'R', 26}, {'T', 26}, {'Y', 26},
+        {'U', 26}, {'I', 26}, {'O', 26}, {'P', 26}, {'[', 26}, {']', 26}, {'\\', 38}, {'DEL', 51}
     },
     -- Row 3: ASDF row
     {
-        {'CAPS', 51}, {'A', 26}, {'S', 26}, {'D', 26}, {'F', 26}, {'G', 26}, {'H', 26}, 
-        {'J', 26}, {'K', 26}, {'L', 26}, {';', 26}, {"'", 26}, {'ENTER', 58}
+        {'CAPS', 51}, {'A', 26}, {'S', 26}, {'D', 26}, {'F', 26}, {'G', 26}, {'H', 26},
+        {'J', 26}, {'K', 26}, {'L', 26}, {';', 26}, {"'", 26}, {'ENTER', 58}, {'HOME', 51}
     },
     -- Row 4: ZXCV row
     {
-        {'SHIFT', 64}, {'Z', 26}, {'X', 26}, {'C', 26}, {'V', 26}, {'B', 26}, {'N', 26}, 
-        {'M', 26}, {',', 26}, {'.', 26}, {'/', 26}, {'SHIFT', 78}
+        {'SHIFT', 64}, {'Z', 26}, {'X', 26}, {'C', 26}, {'V', 26}, {'B', 26}, {'N', 26},
+        {'M', 26}, {',', 26}, {'.', 26}, {'/', 26}, {'SHIFT', 78}, {'END', 51}
     }
-}
+};
 
--- Function to validate filename doesn't contain invalid characters
-local function has_invalid_filename_chars(filename)
-    if not filename or filename == '' then
-        return false
-    end
-    -- Check for Windows invalid filename characters: \ / : * ? " < > | and spaces
-    return filename:match('[\\/:*?"<>| ]') ~= nil
+-- The editor's rows: the key alone and with each modifier.
+local rows = {
+    { prefix = '',  modifier = '',      text = { '' }, multi = { false } },
+    { prefix = '^', modifier = 'Ctrl',  text = { '' }, multi = { false } },
+    { prefix = '!', modifier = 'Alt',   text = { '' }, multi = { false } },
+    { prefix = '+', modifier = 'Shift', text = { '' }, multi = { false } },
+};
+
+-- Layout, in unscaled pixels (style.S scales each one)
+local MARGIN    = 6;    -- round the panel, room for its shadow
+local PAD       = 18;   -- the panel's left and right padding
+local INNER_W   = 540;  -- the keyboard's width, and every row's
+local TITLE_H   = 36;
+local KEY_H     = 28;
+local KEY_GAP   = 6;
+local NAV_GAP   = 12;   -- before the Ins/Del/Home/End column
+local BLOCK_GAP = 14;   -- above and below the keyboard
+local HEAD_H    = 30;   -- the editor's heading
+local ROW_H     = 34;   -- a one-line binding
+local FIELD_H   = 26;
+local MULTI_H   = 100;  -- a macro's field
+local NOTE_H    = 18;   -- "From Global: ..." under a field
+local FIELD_X   = 152;  -- where the command fields start
+local FOOT_H    = 46;   -- the last row: the profile picker, Delete and Save
+local ERROR_H   = 24;   -- a save that failed, under the last row
+
+local selected_key = '';   -- the key being edited ('' for none)
+local scopes = {};         -- the profiles that apply now, lowest priority first
+local scope_index = 1;     -- the one being edited
+local scope_ids = '';
+local bound = {};          -- chord id -> the binding in force
+local bound_keys = {};     -- key -> its bindings in force
+local on_changed = nil;    -- called after a profile is saved
+local error_message = '';
+
+local function row_allowed(row)
+    return not blocked_keybinds.is_combination_blocked(selected_key, row.modifier);
 end
 
--- Function to refresh the list of available script files
-local function refresh_scripts_list()
-    keyboard_ui.available_scripts = {};
-    local scripts_path = ui_functions.get_scripts_path();
-    
-    -- Helper function to check if file is a job binding profile (JOB_JOB.txt format)
-    local function is_job_binding_file(filename)
-        return filename:match('^[A-Z][A-Z][A-Z]_[A-Z][A-Z][A-Z]%.txt$') ~= nil;
-    end
-    
-    -- Helper function to check if file should be ignored
-    local function is_ignored_file(filename)
-        local lower = filename:lower();
-        return lower == 'default.txt' or lower == 'launcher.txt';
-    end
-    
-    -- Use Lua's lfs library if available, otherwise use a simple file list
-    local ok, lfs = pcall(require, 'lfs');
-    if ok then
-        -- Use lfs to list directory (wrapped in pcall to handle missing directory)
-        local dir_ok, dir_iter, dir_obj = pcall(lfs.dir, scripts_path);
-        if dir_ok and dir_iter then
-            for file in dir_iter, dir_obj do
-                if file:match('%.txt$') and not is_job_binding_file(file) and not is_ignored_file(file) then
-                    table.insert(keyboard_ui.available_scripts, file);
-                end
-            end
-        end
-    else
-        -- Fallback: Try to execute dir command and parse output
-        -- This is Windows-specific
-        local handle = io.popen('dir "' .. scripts_path .. '\\*.txt" /B 2>nul');
-        if handle then
-            for file in handle:lines() do
-                if file:match('%.txt$') and not is_job_binding_file(file) and not is_ignored_file(file) then
-                    table.insert(keyboard_ui.available_scripts, file);
-                end
-            end
-            handle:close();
-        end
-    end
-    
-    -- Sort alphabetically
-    table.sort(keyboard_ui.available_scripts);
-    keyboard_ui.last_scripts_refresh = os.time();
+local function describe(binding)
+    local first = binding.lines[1] or '';
+    return #binding.lines > 1 and (first .. ' ...') or first;
 end
 
--- Function to render a virtual keyboard button
-local function render_key_button(key, width)
-    if key == '' then
-        -- Spacer
-        imgui.SameLine();
-        imgui.Dummy({ width, 30 });
-        return false
+-- Fill the editor from the profile being edited.
+local function load_rows()
+    local layer = scopes[scope_index] and profiles.layer(scopes[scope_index].id) or {};
+    for _, row in ipairs(rows) do
+        local lines = selected_key ~= '' and layer[row.prefix .. selected_key] or {};
+        row.text[1] = table.concat(lines, '\n');
+        row.multi[1] = #lines > 1;
     end
-    
-    local clicked = false
-    
-    -- Check if this key is blocked
-    local is_blocked = blocked_keybinds.blocked[key:upper()] or false
-    
-    -- Check if this key is bound
-    local is_bound = false
-    for _, binding in ipairs(current_bindings) do
-        if binding.key:upper() == key:upper() then
-            is_bound = true
-            break
-        end
+    error_message = '';
+end
+
+-- Write the editor's rows (or with clear, nothing) to the profile being edited.
+local function save_rows(clear)
+    local scope = scopes[scope_index];
+    if selected_key == '' or not scope then
+        return;
     end
-    
-    -- Determine if we need to push custom colors
-    local push_colors = false
-    local push_alpha = false
-    
-    -- Style the button based on status: blocked > selected > bound > normal
-    if is_blocked then
-        -- Blocked keys: dark red/disabled appearance
-        imgui.PushStyleColor(ImGuiCol_Button, { 0.4, 0.1, 0.1, 0.6 });
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.4, 0.1, 0.1, 0.6 });
-        imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.4, 0.1, 0.1, 0.6 });
-        imgui.PushStyleVar(ImGuiStyleVar_Alpha, 0.5);
-        push_colors = true
-        push_alpha = true
-    elseif keyboard_ui.binding_key[1] ~= '' and keyboard_ui.binding_key[1]:upper() == key:upper() then
-        -- Selected key: green (active binding being edited)
-        imgui.PushStyleColor(ImGuiCol_Button, { 0.1, 0.6, 0.1, 1.0 });
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.15, 0.7, 0.15, 1.0 });
-        imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.08, 0.5, 0.08, 1.0 });
-        push_colors = true
-    elseif is_bound then
-        -- Bound keys: default ImGui styling (standard button color)
-        -- No custom styling - uses default ImGui button colors
-        push_colors = false
-    else
-        -- Normal keys: gray
-        imgui.PushStyleColor(ImGuiCol_Button, { 0.3, 0.3, 0.3, 1.0 });
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.4, 0.4, 0.4, 1.0 });
-        imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.2, 0.2, 0.2, 1.0 });
-        push_colors = true
-    end
-    
-    -- Only allow clicking if not blocked
-    local button_clicked = false
-    if is_blocked then
-        -- Disabled button - still render but don't handle clicks
-        imgui.Button(key, { width, 30 });
-    else
-        button_clicked = imgui.Button(key, { width, 30 });
-    end
-    
-    -- Show tooltip on hover if key has bindings
-    if is_bound and imgui.IsItemHovered() then
-        local tooltip_lines = {};
-        for _, binding in ipairs(current_bindings) do
-            if binding.key:upper() == key:upper() then
-                local modifier_text = binding.modifiers ~= '' and (binding.modifiers .. ' + ') or '';
-                table.insert(tooltip_lines, modifier_text .. binding.key .. ': ' .. binding.command);
-            end
-        end
-        if #tooltip_lines > 0 then
-            imgui.SetTooltip(table.concat(tooltip_lines, '\n'));
-        end
-    end
-    
-    if button_clicked then
-        -- Handle key click - populate UI with existing bindings for all modifier combinations
-        keyboard_ui.binding_key[1] = key:upper();
-        keyboard_ui.error_message = '';
-        
-        -- Helper function to load binding data for a specific modifier combination
-        local function load_modifier_binding(has_ctrl, has_alt, has_shift)
-            local cmd_text, is_macro, macro_text
-            
-            -- Find existing binding for this key+modifier combination
-            local existing_binding = nil
-            for _, binding in ipairs(current_bindings) do
-                if binding.key:upper() == key:upper() then
-                    local modifiers = binding.modifiers or ''
-                    local bind_has_ctrl = modifiers:find('Ctrl') ~= nil
-                    local bind_has_alt = modifiers:find('Alt') ~= nil
-                    local bind_has_shift = modifiers:find('Shift') ~= nil
-                    
-                    if bind_has_ctrl == has_ctrl and bind_has_alt == has_alt and bind_has_shift == has_shift then
-                        existing_binding = binding
-                        break
+    for _, row in ipairs(rows) do
+        if row_allowed(row) then
+            local lines = {};
+            if not clear then
+                for line in row.text[1]:gmatch('[^\r\n]+') do
+                    line = line:match('^%s*(.-)%s*$');
+                    if line ~= '' then
+                        lines[#lines + 1] = line;
                     end
                 end
             end
-            
-            if existing_binding then
-                cmd_text = existing_binding.command or ''
-                is_macro = existing_binding.is_macro or false
-                macro_text = ''
-                
-                -- Load macro content if it's a macro
-                if existing_binding.is_macro and existing_binding.command:match('^/exec%s+(.+)$') then
-                    local macro_name = existing_binding.command:match('^/exec%s+(.+)$')
-                    local macro_path = string.format('%s/%s', ui_functions.get_scripts_path(), macro_name)
-                    if not macro_path:match('%.txt$') then
-                        macro_path = macro_path .. '.txt'
-                    end
-                    
-                    local macro_file = io.open(macro_path, 'r')
-                    if macro_file then
-                        macro_text = macro_file:read('*all') or ''
-                        macro_file:close()
-                    end
-                    
-                    -- Set command to just the macro name for display
-                    cmd_text = macro_name:gsub('%.txt$', '')
-                end
-            else
-                -- No binding exists for this combination
-                cmd_text = ''
-                is_macro = false
-                macro_text = ''
-            end
-            
-            return cmd_text, is_macro, macro_text
+            profiles.set(scope.id, row.prefix .. selected_key, lines);
         end
-        
-        -- Load all 4 modifier combinations
-        keyboard_ui.command_text_none[1], keyboard_ui.is_macro_none[1], keyboard_ui.macro_text_none[1] = 
-            load_modifier_binding(false, false, false)
-        
-        -- Check if modifier combinations are valid for this key before loading
-        local is_valid_ctrl, _ = ui_functions.validate_key_binding(key:upper(), false, false, true)
-        local is_valid_alt, _ = ui_functions.validate_key_binding(key:upper(), false, true, false)
-        local is_valid_shift, _ = ui_functions.validate_key_binding(key:upper(), true, false, false)
-        
-        if is_valid_ctrl then
-            keyboard_ui.command_text_ctrl[1], keyboard_ui.is_macro_ctrl[1], keyboard_ui.macro_text_ctrl[1] = 
-                load_modifier_binding(true, false, false)
-        else
-            keyboard_ui.command_text_ctrl[1] = ''
-            keyboard_ui.is_macro_ctrl[1] = false
-            keyboard_ui.macro_text_ctrl[1] = ''
-        end
-        
-        if is_valid_alt then
-            keyboard_ui.command_text_alt[1], keyboard_ui.is_macro_alt[1], keyboard_ui.macro_text_alt[1] = 
-                load_modifier_binding(false, true, false)
-        else
-            keyboard_ui.command_text_alt[1] = ''
-            keyboard_ui.is_macro_alt[1] = false
-            keyboard_ui.macro_text_alt[1] = ''
-        end
-        
-        if is_valid_shift then
-            keyboard_ui.command_text_shift[1], keyboard_ui.is_macro_shift[1], keyboard_ui.macro_text_shift[1] = 
-                load_modifier_binding(false, false, true)
-        else
-            keyboard_ui.command_text_shift[1] = ''
-            keyboard_ui.is_macro_shift[1] = false
-            keyboard_ui.macro_text_shift[1] = ''
-        end
-        
-        clicked = true
     end
-    
-    -- Pop style colors only if we pushed them
-    if push_colors then
-        imgui.PopStyleColor(3);
+    local ok, err = profiles.save(scope.id);
+    if on_changed then
+        on_changed(); -- rebinds the keys and comes back through set_context
     end
-    if push_alpha then
-        imgui.PopStyleVar();
-    end
-    
-    return clicked
+    error_message = ok and '' or ('Could not save ' .. scope.id .. '.txt: ' .. tostring(err));
 end
 
--- Function to render the virtual keyboard
-local function render_virtual_keyboard()
-    for row_index, row in ipairs(keyboard_layout) do
-        local first_key = true
-        for _, key_data in ipairs(row) do
-            local key = key_data[1]
-            local width = key_data[2]
-            
-            if not first_key then
-                imgui.SameLine();
-            end
-            first_key = false
-            
-            render_key_button(key, width)
+-- One key: sunken while unbound, a raised keycap while bound, in the accent
+-- while it is the one being edited, faded while the game keeps it.
+local function draw_key(dl, id, key, x, y, w, h)
+    local usable = not blocked_keybinds.blocked[key];
+    local bindings = usable and bound_keys[key] or nil;
+    local hovered, clicked = style.hit(id, x, y, w, h);
+
+    local picked = style.ease(id .. '.picked', usable and selected_key == key and 1 or 0);
+    local lit = style.ease(id .. '.lit', usable and hovered and 1 or 0, 22);
+    local alpha = usable and 1 or 0.4;
+    local face = bindings and P.seg or P.well;
+    local edge = bindings and mix(P.seg, P.white, 0.12) or P.well_edge;
+    local ink = not usable and P.faint or bindings and P.text or P.dim;
+
+    style.fill(dl, x, y, w, h, mix(face, P.accent_bg, picked), S(4), alpha);
+    style.outline(dl, x, y, w, h, mix(mix(edge, P.accent_lo, lit), P.accent, picked), S(4), alpha);
+    if lit > 0.01 then
+        style.fill(dl, x, y, w, h, '#FFFFFF', S(4), 0.05 * lit);
+    end
+    -- a letter is drawn larger than a word, which has to fit its key
+    style.text_centred(dl, x + w / 2, y + h / 2, key, mix(mix(ink, P.text, lit), P.white, picked),
+        style.fonts.text, S(#key == 1 and style.BODY + 1 or style.BODY - 1.5), alpha);
+
+    -- Show what the key runs on hover
+    if bindings and hovered then
+        local lines = {};
+        for _, binding in ipairs(bindings) do
+            local combo = (binding.ctrl and 'Ctrl + ' or '') .. (binding.alt and 'Alt + ' or '')
+                .. (binding.shift and 'Shift + ' or '') .. binding.key;
+            lines[#lines + 1] = ('%s  [%s]  %s'):format(combo, binding.scope.label, describe(binding));
         end
+        style.tooltip(table.concat(lines, '\n'));
+    end
+
+    if clicked and usable then
+        selected_key = key;
+        load_rows();
     end
 end
 
--- Function to save current bindings for all modifier combinations
-local function save_current_binding()
-    if keyboard_ui.binding_key[1] == '' then
-        keyboard_ui.error_message = 'No key selected'
-        return false
-    end
-    
-    local all_success = true
-    local last_error = ''
-    
-    -- Helper function to save a single modifier combination
-    local function save_modifier_binding(cmd_text, is_macro, macro_text, has_ctrl, has_alt, has_shift)
-        -- Skip if no command is set
-        if cmd_text == '' then
-            return true
+-- The keyboard, w wide: every row ends at the same right edge
+local function draw_keyboard(dl, x, y, w)
+    local gap, h = S(KEY_GAP), S(KEY_H);
+    for r, row in ipairs(keyboard_layout) do
+        local nav = row[#row];
+        local nav_x = x + w - S(nav[2]);
+        local at = x;
+        for i = 1, #row - 1 do
+            local key = row[i];
+            -- the last key before the Ins/Del/Home/End column takes what is left
+            local key_w = i == #row - 1 and (nav_x - S(NAV_GAP) - at) or S(key[2]);
+            draw_key(dl, ('##jb_key_%d_%d'):format(r, i), key[1], at, y, key_w, h);
+            at = at + key_w + gap;
         end
-        
-        local binding_data = {
-            key = keyboard_ui.binding_key[1],
-            command = cmd_text,
-            is_macro = is_macro,
-            macro_text = macro_text,
-            shift_modifier = has_shift,
-            alt_modifier = has_alt,
-            ctrl_modifier = has_ctrl
-        }
-        
-        local success, error_msg = ui_functions.save_current_binding(binding_data, current_bindings, current_profile_path, keyboard_ui.debug_mode)
-        if not success then
-            last_error = error_msg
-            return false
-        end
-        return true
+        draw_key(dl, ('##jb_key_%d_%d'):format(r, #row), nav[1], nav_x, y, S(nav[2]), h);
+        y = y + h + gap;
     end
-    
-    -- Check which modifier combinations are valid for this key
-    local is_valid_ctrl, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, false, true)
-    local is_valid_alt, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, true, false)
-    local is_valid_shift, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], true, false, false)
-    
-    -- Save all 4 modifier combinations (only if valid)
-    if not save_modifier_binding(keyboard_ui.command_text_none[1], keyboard_ui.is_macro_none[1], 
-                                  keyboard_ui.macro_text_none[1], false, false, false) then
-        all_success = false
-    end
-    
-    if is_valid_ctrl then
-        if not save_modifier_binding(keyboard_ui.command_text_ctrl[1], keyboard_ui.is_macro_ctrl[1], 
-                                      keyboard_ui.macro_text_ctrl[1], true, false, false) then
-            all_success = false
-        end
-    end
-    
-    if is_valid_alt then
-        if not save_modifier_binding(keyboard_ui.command_text_alt[1], keyboard_ui.is_macro_alt[1], 
-                                      keyboard_ui.macro_text_alt[1], false, true, false) then
-            all_success = false
-        end
-    end
-    
-    if is_valid_shift then
-        if not save_modifier_binding(keyboard_ui.command_text_shift[1], keyboard_ui.is_macro_shift[1], 
-                                      keyboard_ui.macro_text_shift[1], false, false, true) then
-            all_success = false
-        end
-    end
-    
-    if not all_success then
-        keyboard_ui.error_message = last_error
-        return false
-    end
-    
-    keyboard_ui.error_message = ''
-    return true
 end
 
--- Function to delete current bindings for all modifier combinations
-local function delete_current_binding()
-    if keyboard_ui.binding_key[1] == '' then
-        keyboard_ui.error_message = 'No key selected'
-        return false
-    end
-    
-    local all_success = true
-    local last_error = ''
-    
-    -- Helper function to delete a single modifier combination
-    local function delete_modifier_binding(has_ctrl, has_alt, has_shift)
-        local binding_data = {
-            key = keyboard_ui.binding_key[1],
-            shift_modifier = has_shift,
-            alt_modifier = has_alt,
-            ctrl_modifier = has_ctrl
-        }
-        
-        local success, error_msg = ui_functions.delete_current_binding(binding_data, current_bindings, current_profile_path, keyboard_ui.debug_mode)
-        if not success then
-            last_error = error_msg
-            return false
-        end
-        return true
-    end
-    
-    -- Delete all 4 modifier combinations
-    delete_modifier_binding(false, false, false)
-    delete_modifier_binding(true, false, false)
-    delete_modifier_binding(false, true, false)
-    delete_modifier_binding(false, false, true)
-    
-    -- Clear UI
-    keyboard_ui.binding_key[1] = ''
-    keyboard_ui.command_text_none[1] = ''
-    keyboard_ui.macro_text_none[1] = ''
-    keyboard_ui.is_macro_none[1] = false
-    keyboard_ui.command_text_ctrl[1] = ''
-    keyboard_ui.macro_text_ctrl[1] = ''
-    keyboard_ui.is_macro_ctrl[1] = false
-    keyboard_ui.command_text_alt[1] = ''
-    keyboard_ui.macro_text_alt[1] = ''
-    keyboard_ui.is_macro_alt[1] = false
-    keyboard_ui.command_text_shift[1] = ''
-    keyboard_ui.macro_text_shift[1] = ''
-    keyboard_ui.is_macro_shift[1] = false
-    keyboard_ui.error_message = ''
-    return true
+local function keyboard_height()
+    return #keyboard_layout * S(KEY_H) + (#keyboard_layout - 1) * S(KEY_GAP);
 end
 
--- Function to render the binding editor (right side content from config_ui)
-local function render_binding_editor()
-    -- Helper function to render a single modifier binding row
-    local function render_binding_row(label, cmd_text, is_macro, macro_text, label_width)
-        imgui.Text(label);
-        imgui.SameLine();
-        
-        -- Clear button aligned at fixed position
-        imgui.SetCursorPosX(112); -- Align Clear Button
-        if imgui.Button('X##clear_' .. label, { 20, 0 }) then
-            cmd_text[1] = '';
-            is_macro[1] = false;
-            macro_text[1] = '';
-        end
-        if imgui.IsItemHovered() then
-            imgui.SetTooltip('Clear binding');
-        end
-        imgui.SameLine();
-        
-        -- Align to the label width
-        imgui.SetCursorPosX(label_width);
-        
-        -- Check for invalid filename characters when in macro mode
-        local has_invalid_chars = is_macro[1] and has_invalid_filename_chars(cmd_text[1]);
-        
-        -- Set text color to red if invalid characters in macro mode
-        if has_invalid_chars then
-            imgui.PushStyleColor(ImGuiCol_Text, { 1.0, 0.3, 0.3, 1.0 });
-        end
-        
-        -- Command text field (always editable, used for filename when macro mode)
-        imgui.SetNextItemWidth(330); -- Align Command Text Width
-        imgui.InputText('##cmd_' .. label, cmd_text, 256, ImGuiInputTextFlags_None);
-        
-        -- Show tooltip if invalid characters detected
-        if has_invalid_chars and imgui.IsItemHovered() then
-            imgui.SetTooltip('A file name can\'t contain any of the following characters:\n\\ / : * ? " < > | or spaces');
-        end
-        
-        if has_invalid_chars then
-            imgui.PopStyleColor();
-        end
-        
-        imgui.SameLine();
-        
-        -- Macro checkbox
-        if imgui.Checkbox('##macro_' .. label, is_macro) then
-            if is_macro[1] then
-                -- Switching to macro mode
-                -- Try to load existing macro content if filename is specified
-                if cmd_text[1] ~= '' then
-                    local macro_filename = cmd_text[1];
-                    if not macro_filename:match('%.txt$') then
-                        macro_filename = macro_filename .. '.txt';
-                    end
-                    local macro_path = string.format('%s/%s', ui_functions.get_scripts_path(), macro_filename);
-                    local macro_file = io.open(macro_path, 'r');
-                    if macro_file then
-                        macro_text[1] = macro_file:read('*all') or '';
-                        macro_file:close();
-                    end
-                end
-            else
-                -- Switching to command mode
-                macro_text[1] = '';
+-- Which profile the editor works on, from x. Returns where it ends.
+local function draw_scope_picker(x, cy)
+    local labels = {};
+    for i, scope in ipairs(scopes) do
+        labels[i] = scope.label;
+    end
+    if #labels == 0 then
+        return x;
+    end
+    local index, changed, hovered = style.segments('##jb_scope', x, cy, labels, scope_index);
+    if changed then
+        scope_index = index;
+        load_rows();
+    end
+    if hovered then
+        style.tooltip('The profile being edited. Each applies to the jobs it names.\n'
+            .. 'When two bind the same key, the one further right wins.');
+    end
+    return x + style.segments_width(labels);
+end
+
+-- What the editor will draw for the key picked, and how tall it is: the
+-- window's size is set before it is drawn. nil with no key picked.
+local function plan_editor()
+    if selected_key == '' then
+        return nil, S(FOOT_H);
+    end
+    local scope = scopes[scope_index];
+    local plan = { key = selected_key };
+    local height = S(6) + S(HEAD_H);
+    for _, row in ipairs(rows) do
+        if row_allowed(row) then
+            -- Several commands never collapse back into the one-line field
+            if row.text[1]:find('\n', 1, true) then
+                row.multi[1] = true;
             end
-        end
-        
-        -- Show macro text editor if in macro mode
-        if is_macro[1] then
-            -- Refresh scripts list if needed (every 5 seconds)
-            if os.time() - keyboard_ui.last_scripts_refresh > 5 then
-                refresh_scripts_list();
+            local item = { row = row, multi = row.multi[1], h = row.multi[1] and S(MULTI_H) + S(6) or S(ROW_H) };
+
+            -- Say so when another profile decides what this key runs
+            local binding = bound[row.prefix .. selected_key];
+            if scope and binding and binding.scope.id ~= scope.id then
+                local what = row.text[1] == '' and 'From' or 'Overridden by';
+                item.note = ('%s %s: %s'):format(what, binding.scope.label, describe(binding));
+                item.h = item.h + S(NOTE_H);
             end
-            
-            -- Create a horizontal layout: script list on left, macro text on right
-            -- Script list on the left
-            imgui.BeginChild('##scripts_child_' .. label, { 120, 100 }, true);
-            for i, script_name in ipairs(keyboard_ui.available_scripts) do
-                local is_selected = (keyboard_ui.selected_script_index[1] == i);
-                -- Display name without .txt extension
-                local display_name = script_name:gsub('%.txt$', '');
-                if imgui.Selectable(display_name, is_selected) then
-                    keyboard_ui.selected_script_index[1] = i;
-                    -- Load the selected script into the macro text field
-                    local script_path = string.format('%s/%s', ui_functions.get_scripts_path(), script_name);
-                    local script_file = io.open(script_path, 'r');
-                    if script_file then
-                        macro_text[1] = script_file:read('*all') or '';
-                        script_file:close();
-                        -- Also set the command text to the script name (without .txt)
-                        cmd_text[1] = script_name:gsub('%.txt$', '');
-                    end
-                end
-            end
-            imgui.EndChild();
-            
-            imgui.SameLine();
-            
-            -- Macro text editor on the right
-            imgui.SetNextItemWidth(400);
-            imgui.InputTextMultiline('##macro_' .. label .. '_text', macro_text, 2048, { 362, 100 }); -- Align Macro Text Width
+            plan[#plan + 1] = item;
+            height = height + item.h;
         end
     end
-    
-    -- Calculate label width for alignment
-    local label_width = 136 -- Align Label Width
-    
-    -- Show prompt if no key is selected
-    if keyboard_ui.binding_key[1] == '' then
-        imgui.Spacing();
-        imgui.Spacing();
-        imgui.Text('Click a button on the keyboard to apply a key binding');
-        imgui.Spacing();
-        imgui.Spacing();
-        return
+    plan.error = error_message ~= '' and error_message or nil; -- on a line of its own, under the last row
+    return plan, height + S(FOOT_H) + (plan.error and S(ERROR_H) or 0);
+end
+
+-- One binding: its keys, the command, a cross to clear it, the Macro toggle
+local function draw_binding_row(dl, item, key, x, y, right)
+    local row = item.row;
+    local cy = y + S(ROW_H) / 2;
+
+    local at = x;
+    if row.modifier ~= '' then
+        local px = S(style.BODY + 5);
+        at = at + style.keycap(dl, at, cy, row.modifier) + S(6);
+        style.text_mid(dl, at, cy, '+', P.dim, style.fonts.text, px);
+        at = at + style.measure('+', style.fonts.text, px) + S(6);
     end
-    
-    -- Check which modifier combinations are valid for the selected key
-    local show_none = true -- Always show base key
-    local show_ctrl = false
-    local show_alt = false
-    local show_shift = false
-    
-    local is_valid_ctrl, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, false, true)
-    local is_valid_alt, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], false, true, false)
-    local is_valid_shift, _ = ui_functions.validate_key_binding(keyboard_ui.binding_key[1], true, false, false)
-    
-    show_ctrl = is_valid_ctrl
-    show_alt = is_valid_alt
-    show_shift = is_valid_shift
-    
-    -- Render the 4 binding rows with headers
-    imgui.Text('Binding');
-    imgui.SameLine();
-    imgui.SetCursorPosX(135); -- Above the X button
-    imgui.Text('Command');
-    imgui.SameLine();
-    imgui.SetCursorPosX(label_width + 314); -- Align Macro Text
-    imgui.Text('Macro');
-    
-    imgui.Spacing();
-    
-    -- [KEY]
-    if show_none then
-        render_binding_row(keyboard_ui.binding_key[1]..'    ', 
-                           keyboard_ui.command_text_none, 
-                           keyboard_ui.is_macro_none, 
-                           keyboard_ui.macro_text_none, 
-                           label_width);
-        imgui.Spacing();
+    style.keycap(dl, at, cy, key);
+
+    local chip_w, cross = style.chip_width('Macro'), S(20);
+    local field_x = x + S(FIELD_X);
+    local field_w = right - chip_w - S(8) - cross - S(4) - field_x;
+    local field_h = item.multi and S(MULTI_H) or S(FIELD_H);
+    style.field('##cmd_' .. row.modifier, field_x, cy - S(FIELD_H) / 2, field_w, field_h, row.text, 2048, item.multi);
+
+    if style.cross('##clear_' .. row.modifier, field_x + field_w + S(4) + cross / 2, cy, cross) then
+        row.text[1] = '';
+        row.multi[1] = false;
     end
-    
-    -- + Ctrl
-    if show_ctrl then
-        render_binding_row('+ Ctrl', 
-                           keyboard_ui.command_text_ctrl, 
-                           keyboard_ui.is_macro_ctrl, 
-                           keyboard_ui.macro_text_ctrl, 
-                           label_width);
-        imgui.Spacing();
+    style.tip('Clear binding');
+
+    if style.chip('##macro_' .. row.modifier, right - chip_w, cy, 'Macro', item.multi) then
+        row.multi[1] = not row.multi[1];
     end
-    
-    -- + Alt
-    if show_alt then
-        render_binding_row('+ Alt', 
-                           keyboard_ui.command_text_alt, 
-                           keyboard_ui.is_macro_alt, 
-                           keyboard_ui.macro_text_alt, 
-                           label_width);
-        imgui.Spacing();
-    end
-    
-    -- + Shift
-    if show_shift then
-        render_binding_row('+ Shift', 
-                           keyboard_ui.command_text_shift, 
-                           keyboard_ui.is_macro_shift, 
-                           keyboard_ui.macro_text_shift, 
-                           label_width);
-        imgui.Spacing();
-    end
-    
-    imgui.Spacing();
-    imgui.Separator();
-    imgui.Spacing();
-    
-    -- Check if any macro bindings have invalid filename characters
-    local has_any_invalid = false;
-    if keyboard_ui.is_macro_none[1] and has_invalid_filename_chars(keyboard_ui.command_text_none[1]) then
-        has_any_invalid = true;
-    end
-    if keyboard_ui.is_macro_ctrl[1] and has_invalid_filename_chars(keyboard_ui.command_text_ctrl[1]) then
-        has_any_invalid = true;
-    end
-    if keyboard_ui.is_macro_alt[1] and has_invalid_filename_chars(keyboard_ui.command_text_alt[1]) then
-        has_any_invalid = true;
-    end
-    if keyboard_ui.is_macro_shift[1] and has_invalid_filename_chars(keyboard_ui.command_text_shift[1]) then
-        has_any_invalid = true;
-    end
-    
-    -- Disable and gray out Save button if invalid characters detected
-    if has_any_invalid then
-        imgui.PushStyleColor(ImGuiCol_Button, { 0.4, 0.1, 0.1, 0.6 });
-        imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.4, 0.1, 0.1, 0.6 });
-        imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.4, 0.1, 0.1, 0.6 });
-        imgui.PushStyleVar(ImGuiStyleVar_Alpha, 0.5);
-    end
-    
-    -- Save and Delete buttons at the bottom
-    local save_clicked = imgui.Button('Save', { 120, 0 });
-    
-    -- Show tooltip on disabled Save button
-    if has_any_invalid and imgui.IsItemHovered() then
-        imgui.SetTooltip('A file name can\'t contain any of the following characters:\n\\ / : * ? " < > | or spaces');
-    end
-    
-    if has_any_invalid then
-        imgui.PopStyleVar();
-        imgui.PopStyleColor(3);
-    end
-    
-    if save_clicked and not has_any_invalid then
-        if save_current_binding() then
-            printf('Bindings saved successfully')
-        else
-            errorf('Failed to save bindings')
-        end
-    end
-    
-    imgui.SameLine();
-    
-    if imgui.Button('Delete', { 120, 0 }) then
-        if delete_current_binding() then
-            printf('Bindings deleted successfully')
-        else
-            errorf('Failed to delete bindings')
-        end
-    end
-    
-    -- Display current profile/job combination
-    imgui.SameLine();
-    imgui.Dummy({ 164, 0 }); -- Move right 164px
-    imgui.SameLine();
-    local profile_display = keyboard_ui.current_profile or 'No Profile Loaded';
-    -- Convert WAR_NIN.txt format to WAR/NIN display
-    profile_display = profile_display:gsub('%.txt$', ''):gsub('_', '/');
-    imgui.Text(profile_display);
-    
-    if keyboard_ui.is_binding then
-        for key_code = 1, 255 do
-            local ok, is_pressed = pcall(function() return imgui.IsKeyPressed(key_code) end)
-            if ok and is_pressed then
-                local key_name = vk_codes.get_key_name(key_code);
-                if vk_codes.is_known_key(key_code) then
-                    keyboard_ui.binding_key[1] = key_name;
-                    keyboard_ui.is_binding = false;
-                    if keyboard_ui.debug_mode then
-                        printf('[DEBUG] Detected key: %s (code: %d)', key_name, key_code);
-                    end
-                else
-                    keyboard_ui.binding_key[1] = 'KEY_' .. key_code;
-                    keyboard_ui.is_binding = false;
-                    if keyboard_ui.debug_mode then
-                        printf('[DEBUG] Detected unknown key code: %d', key_code);
-                    end
-                end
-                break;
-            end
-        end
-        local ok, is_pressed = pcall(function() return imgui.IsKeyPressed(27) end)
-        if ok and is_pressed then
-            keyboard_ui.is_binding = false;
-            if keyboard_ui.debug_mode then
-                printf('[DEBUG] Escape pressed, canceling binding');
-            end
-        end
+    style.tip('Macro: several commands, one per line.\n/wait 2 on its own line pauses for 2 seconds.');
+
+    if item.note then
+        local font, px = style.fonts.base, imgui.GetFontSize();
+        style.text_mid(dl, field_x + S(2), y + item.h - S(NOTE_H) / 2 - S(2),
+            style.fit(item.note, field_w - S(4), font, px), P.dim, font, px);
     end
 end
+
+-- The editor for the key picked: a heading, its bindings, then the last row,
+-- the profile picker with Delete and Save. With no key picked, that row alone,
+-- a hint where the buttons go.
+local function draw_editor(dl, plan, x, y, right)
+    if not plan then
+        local cy = y + S(FOOT_H) / 2;
+        draw_scope_picker(x, cy);
+        style.text_right(dl, right, cy, 'Click a key on the keyboard to bind it', P.dim, style.fonts.text,
+            S(style.BODY - 1));
+        return;
+    end
+
+    -- Heading: spaced capitals in teal, then a hairline
+    y = y + S(6);
+    local cy = y + S(HEAD_H) / 2;
+    local title_w = style.text_spaced(dl, x, cy, 'BINDINGS', P.teal, style.fonts.semi_italic, S(style.SMALL),
+        math.max(1, S(1.2)));
+    style.line(dl, x + title_w + S(10), cy, right, cy, P.line);
+    y = y + S(HEAD_H);
+
+    for _, item in ipairs(plan) do
+        draw_binding_row(dl, item, plan.key, x, y, right);
+        y = y + item.h;
+    end
+
+    cy = y + S(FOOT_H) / 2;
+    draw_scope_picker(x, cy);
+
+    local save_w = math.max(S(84), style.button_width('Save'));
+    local delete_w = math.max(S(84), style.button_width('Delete'));
+    local delete_x = right - save_w - S(8) - delete_w;
+    if style.button('##jb_delete', delete_x, cy, 'Delete', 'danger', delete_w) then
+        save_rows(true);
+    end
+    style.tip('Remove this key\'s bindings from the selected profile');
+    if style.button('##jb_save', right - save_w, cy, 'Save', 'accent', save_w) then
+        save_rows(false);
+    end
+
+    if plan.error then
+        local font, px = style.fonts.base, imgui.GetFontSize();
+        local ey = y + S(FOOT_H) - S(8);
+        style.text_mid(dl, x, ey + S(ERROR_H) / 2 - S(4), style.fit(plan.error, right - x, font, px), P.rose, font, px);
+        style.hit('##jb_error', x, ey, right - x, S(ERROR_H) - S(4));
+        style.tip(plan.error); -- whole, when it was cut to fit
+    end
+end
+
+-- The panel (ImGui draws none of it), then everything in it
+local function draw_window(plan, pw, ph)
+    local m, pad = S(MARGIN), S(PAD);
+    local x, y = imgui.GetCursorScreenPos();
+    x, y = x + m, y + m;
+    local dl = imgui.GetWindowDrawList();
+    style.fill(dl, x - 1, y, pw + 2, ph + 2, '#000000', S(6), 0.35); -- its shadow
+    style.fill(dl, x, y, pw, ph, P.bg, S(5));
+    style.outline(dl, x, y, pw, ph, P.border, S(5));
+
+    -- Title bar
+    local cy = y + S(TITLE_H) / 2;
+    style.text_mid(dl, x + pad, cy, 'JobBinds', P.white, style.fonts.semi, S(style.BODY));
+    local box = S(21);
+    if style.cross('##jb_close', x + pw - pad - box / 2 + S(4), cy, box) then
+        keyboard_ui.is_open[1] = false;
+    end
+    style.tip('Close');
+    style.line(dl, x, y + S(TITLE_H), x + pw, y + S(TITLE_H), P.border);
+
+    local left, right = x + pad, x + pw - pad;
+    y = y + S(TITLE_H) + S(BLOCK_GAP);
+    draw_keyboard(dl, left, y, right - left);
+    y = y + keyboard_height() + S(BLOCK_GAP);
+    style.line(dl, x, y, x + pw, y, P.border);
+
+    draw_editor(dl, plan, left, y, right);
+end
+
+local WINDOW_FLAGS = ImGuiWindowFlags_NoTitleBar + ImGuiWindowFlags_NoResize + ImGuiWindowFlags_NoScrollbar
+    + ImGuiWindowFlags_NoScrollWithMouse + ImGuiWindowFlags_NoCollapse + ImGuiWindowFlags_NoBackground
+    + ImGuiWindowFlags_NoNavInputs; -- NoNavInputs: Tab is the game's (target cycling), not ImGui's
 
 -- Main render function
 function keyboard_ui.render()
     if not keyboard_ui.is_open[1] then
-        return
+        return;
     end
 
-    -- Window automatically sizes to content
-    if imgui.Begin('JobBinds', keyboard_ui.is_open, ImGuiWindowFlags_AlwaysAutoResize) then
-        -- Virtual keyboard on top
-        render_virtual_keyboard();
-        
-        -- Horizontal divider
-        imgui.Separator();
-        
-        -- Binding editor on bottom
-        render_binding_editor();
+    style.frame();
+    local plan, editor_h = plan_editor();
+    local m, pw = S(MARGIN), S(INNER_W) + S(PAD) * 2;
+    local ph = S(TITLE_H) + S(BLOCK_GAP) + keyboard_height() + S(BLOCK_GAP) + editor_h;
+
+    local screen_w, screen_h = style.screen();
+    imgui.SetNextWindowPos({ screen_w / 2, screen_h / 2 }, ImGuiCond_FirstUseEver, { 0.5, 0.5 });
+    imgui.SetNextWindowSize({ pw + m * 2, ph + m * 2 }, ImGuiCond_Always);
+    imgui.PushStyleVar(ImGuiStyleVar_WindowPadding, { 0, 0 });
+    imgui.PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+    imgui.PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0, 0 });
+
+    -- An error while drawing must still reach End: ImGui asserts on a window left open
+    local ok, err = true, nil;
+    if imgui.Begin('JobBinds', keyboard_ui.is_open, WINDOW_FLAGS) then
+        ok, err = pcall(draw_window, plan, pw, ph);
     end
     imgui.End();
-end
+    imgui.PopStyleVar(3);
+    style.tooltips();
 
-function keyboard_ui.show()
-    keyboard_ui.is_open[1] = true;
-    -- Refresh scripts list when showing UI
-    if keyboard_ui.last_scripts_refresh == 0 then
-        refresh_scripts_list();
+    if not ok then
+        keyboard_ui.is_open[1] = false; -- not drawn again until /jb reopens it
+        error(err, 0);
     end
 end
 
-function keyboard_ui.set_current_profile(profile_name)
-    keyboard_ui.current_profile = profile_name or 'No Profile Loaded';
+-- Segoe UI for the window. From Ashita's load event: ImGui 1.81 takes no font mid-frame.
+function keyboard_ui.load()
+    style.load();
 end
 
-function keyboard_ui.load_profile(profile_path)
-    current_bindings = ui_functions.load_bindings_from_profile(profile_path, keyboard_ui.debug_mode);
-    current_profile_path = profile_path;
+function keyboard_ui.toggle()
+    keyboard_ui.is_open[1] = not keyboard_ui.is_open[1];
 end
 
-function keyboard_ui.set_debug_mode(enabled)
-    keyboard_ui.debug_mode = enabled;
+-- The profiles that apply now and the bindings in force. changed() is called
+-- after the window saves a profile.
+function keyboard_ui.set_context(new_scopes, bindings, changed)
+    local ids = {};
+    for i, scope in ipairs(new_scopes) do
+        ids[i] = scope.id;
+    end
+    ids = table.concat(ids, ' ');
+    if ids ~= scope_ids then
+        -- another job: start on its exact job/subjob profile (Global comes last)
+        scope_ids = ids;
+        scope_index = math.max(1, #new_scopes - 1);
+    end
+    scopes = new_scopes;
+    on_changed = changed;
+
+    bound, bound_keys = {}, {};
+    for _, binding in ipairs(bindings) do
+        bound[binding.id] = binding;
+        bound_keys[binding.key] = bound_keys[binding.key] or {};
+        table.insert(bound_keys[binding.key], binding);
+    end
+    load_rows();
 end
 
 return keyboard_ui;
