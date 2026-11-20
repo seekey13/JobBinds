@@ -6,12 +6,14 @@
 *     return {
 *         { name = 'Main', x = 760, y = 940, columns = 10, size = 44, key_text = 10, label_text = 11,
 *           conditions = { { kind = 'tp', op = '>=', value = 1000 } },
-*           slots = { { key = '1' }, { key = '^1', label = 'Holy' }, {} } },
+*           slots = { { key = '1', jobs = { PLD_WAR = { label = 'Holy' }, NIN_WAR = { recasts = {} } } },
+*                     { key = 'G' }, {} } },
 *     }
 *
-* A slot points at a key. Its label and recasts are taken from what the key
-* runs for the current job, unless the slot sets them: an empty label means
-* that, and so does recasts left out. recasts = {} shows none.
+* A slot points at a key, and shows only on jobs that key is bound for. Its
+* label and recasts are taken from what the key runs for the current job,
+* unless the slot sets them for that job/subjob under jobs: a label left out
+* means that, and so do recasts left out. recasts = {} shows none.
 *
 * The slots are #slots; columns of them make a row. x and y are the bar's top
 * left in screen pixels; size is a slot's side, and key_text and label_text the
@@ -68,6 +70,27 @@ local function clean_recasts(list)
     return out;
 end
 
+-- A slot's label and recasts for each job/subjob ('PLD_WAR'), those that set something
+local function clean_jobs(jobs)
+    if type(jobs) ~= 'table' then
+        return nil;
+    end
+    local out = nil;
+    for job, own in pairs(jobs) do
+        if type(job) == 'string' and job:match('^%u+_%u+$') and type(own) == 'table' then
+            local entry = {
+                label = (text(own.label) and own.label ~= '') and own.label or nil,
+                recasts = clean_recasts(own.recasts),
+            };
+            if entry.label or entry.recasts then
+                out = out or {};
+                out[job] = entry;
+            end
+        end
+    end
+    return out;
+end
+
 local function clean_slot(s)
     local slot = {};
     if type(s) ~= 'table' then
@@ -75,8 +98,7 @@ local function clean_slot(s)
     end
     local chord = text(s.key) and profiles.parse_chord(s.key:match('^%s*(.-)%s*$'));
     slot.key = chord and chord.id or nil;
-    slot.label = (text(s.label) and s.label ~= '') and s.label or nil;
-    slot.recasts = clean_recasts(s.recasts);
+    slot.jobs = clean_jobs(s.jobs); -- (2.1's first label and recasts, for every job, are left behind)
     return slot;
 end
 
@@ -142,7 +164,7 @@ hotbars.reload = hotbars.load;
 
 -- Keys in this order, the rest sorted after them
 local ORDER = { name = 1, x = 2, y = 3, columns = 4, size = 5, key_text = 6, label_text = 7, key = 8, label = 9,
-    kind = 10, op = 11, value = 12, is = 13, id = 14, conditions = 20, slots = 21, recasts = 22 };
+    kind = 10, op = 11, value = 12, is = 13, id = 14, conditions = 20, slots = 21, recasts = 22, jobs = 23 };
 
 local function scalar(v)
     if type(v) == 'string' then
@@ -173,7 +195,8 @@ local function serialize(t, indent)
         return type(v) == 'table' and serialize(v, indent .. '    ') or scalar(v);
     end
     for _, k in ipairs(keys) do
-        parts[#parts + 1] = k .. ' = ' .. value(t[k]);
+        local name = tostring(k):match('^[%a_][%w_]*$') and k or ('[' .. scalar(k) .. ']');
+        parts[#parts + 1] = name .. ' = ' .. value(t[k]);
     end
     for i = 1, #t do
         parts[#parts + 1] = value(t[i]);
@@ -233,6 +256,44 @@ end
 
 function hotbars.list()
     return bars;
+end
+
+-- Jobs ------------------------------------------------------------------------
+
+-- 'PLD', 'WAR' -> 'PLD_WAR'; no subjob is NON. nil without a main job.
+function hotbars.job_key(main, sub)
+    return main and (main .. '_' .. (sub or 'NON')) or nil;
+end
+
+-- 'PLD_WAR' -> 'PLD/WAR'
+function hotbars.job_label(job)
+    return job and (job:gsub('_', '/')) or '';
+end
+
+-- A slot's own label and recasts on a job/subjob: { label, recasts }, or nil.
+-- With create, made when it isn't there yet.
+function hotbars.for_job(slot, job, create)
+    if not job then
+        return nil;
+    end
+    local own = slot.jobs and slot.jobs[job];
+    if not own and create then
+        slot.jobs = slot.jobs or {};
+        own = {};
+        slot.jobs[job] = own;
+    end
+    return own;
+end
+
+-- Forget a job's settings once they set nothing
+function hotbars.prune(slot, job)
+    local own = slot.jobs and slot.jobs[job];
+    if own and own.label == nil and own.recasts == nil then
+        slot.jobs[job] = nil;
+    end
+    if slot.jobs and next(slot.jobs) == nil then
+        slot.jobs = nil;
+    end
 end
 
 -- A bar's shape in screen pixels: a slot's side, the gap, columns, rows, width, height

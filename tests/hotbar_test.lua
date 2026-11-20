@@ -80,6 +80,7 @@ ashita = { fs = { create_dir = function () end, exists = function () return true
 -- is clicked, pressed (held), dragged or typed into on the next frame.
 local input = {};
 local last_id = nil;
+local seen = {}; -- the controls and windows drawn this frame
 local dl = setmetatable({}, { __index = function () return function () end; end });
 setmetatable(_G, { __index = function (_, name)
     if type(name) == 'string' and name:match('^ImGui') then
@@ -94,9 +95,9 @@ package.preload['imgui'] = function ()
         GetFont = function () return 'font'; end,
         GetIO = function () return { DisplaySize = { x = 1920, y = 1080 } }; end,
         GetCursorScreenPos = function () return 100, 100; end,
-        Begin = function () return true; end,
+        Begin = function (name) seen[name] = true; return true; end,
         BeginTooltip = function () return true; end,
-        InvisibleButton = function (id) last_id = id; return input.click == id; end,
+        InvisibleButton = function (id) last_id = id; seen[id] = true; return input.click == id; end,
         IsItemHovered = function () return input.hover == last_id; end,
         IsItemActive = function () return input.hold == last_id or input.drag == last_id; end,
         IsItemActivated = function () return input.drag == last_id; end,
@@ -282,9 +283,11 @@ do
     eq('names differ', hotbars.list()[3].name, 'Bar 3');
 
     bar.conditions = { { kind = 'tp', op = '>=', value = 1000 }, { kind = 'buff', name = 'Haste', is = false } };
-    bar.slots[2].label = 'Holy "quoted"';
-    bar.slots[2].recasts = { { kind = 'ma', id = 21, name = 'Holy' } };
-    bar.slots[3].recasts = {};
+    bar.slots[2].jobs = {
+        PLD_WAR = { label = 'Holy "quoted"', recasts = { { kind = 'ma', id = 21, name = 'Holy' } } },
+        NIN_WAR = { recasts = {} },
+    };
+    bar.slots[3].label = 'For every job'; -- the first 2.1's label, for every job: left behind
     bar.key_text, bar.label_text = 14, 18;
     local ok, err = hotbars.save();
     eq('save', ok, true);
@@ -300,10 +303,12 @@ do
     eq('label text read back', bar.label_text, 18);
     eq('conditions read back', #bar.conditions, 2);
     eq('buff missing read back', bar.conditions[2].is, false);
-    eq('label with quotes read back', bar.slots[2].label, 'Holy "quoted"');
-    eq('recast read back', bar.slots[2].recasts[1].id, 21);
-    eq('no recasts read back', bar.slots[3].recasts and #bar.slots[3].recasts, 0);
-    eq('auto recasts read back', bar.slots[1].recasts, nil);
+    eq('job label with quotes read back', bar.slots[2].jobs.PLD_WAR.label, 'Holy "quoted"');
+    eq('job recast read back', bar.slots[2].jobs.PLD_WAR.recasts[1].id, 21);
+    eq('no recasts on another job read back', #bar.slots[2].jobs.NIN_WAR.recasts, 0);
+    eq('no label on that job', bar.slots[2].jobs.NIN_WAR.label, nil);
+    eq('label for every job left behind', bar.slots[3].label, nil);
+    eq('no job settings read back', bar.slots[1].jobs, nil);
     eq('empty slots read back', list[3].slots[10] ~= nil, true);
 
     hotbars.set_count(bar, 4);
@@ -340,7 +345,10 @@ do
     write([[return {
         { name = '', x = 'abc', size = 500, columns = 0, key_text = 999, label_text = 'big',
           conditions = { { kind = 'nope' }, { kind = 'tp', value = 99999 } },
-          slots = { { key = '  ^q ' }, 'junk', { recasts = { { kind = 'xx', id = 1 }, { kind = 'ja', id = '5' } } } } },
+          slots = { { key = '  ^q ', jobs = { ['bad key'] = { label = 'x' }, PLD_WAR = { label = '' }, NIN_WAR = 'junk',
+                                              WHM_BLM = { label = 'Cure' } } },
+                    'junk',
+                    { jobs = { PLD_WAR = { recasts = { { kind = 'xx', id = 1 }, { kind = 'ja', id = '5' } } } } } } },
         'not a bar',
     }]]);
     eq('bad file loads', hotbars.load(), true);
@@ -356,8 +364,13 @@ do
     eq('condition value clamped', bar.conditions[1].value, 3000);
     eq('key cleaned', bar.slots[1].key, '^Q');
     eq('junk slot emptied', next(bar.slots[2]), nil);
-    eq('bad recast dropped', #bar.slots[3].recasts, 1);
-    eq('recast id as number', bar.slots[3].recasts[1].id, 5);
+    local jobs = {};
+    for job in pairs(bar.slots[1].jobs or {}) do
+        jobs[#jobs + 1] = job;
+    end
+    eq('only good job settings kept', table.concat(jobs, ','), 'WHM_BLM');
+    eq('bad recast dropped', #bar.slots[3].jobs.PLD_WAR.recasts, 1);
+    eq('recast id as number', bar.slots[3].jobs.PLD_WAR.recasts[1].id, 5);
 end
 
 -- A file that can't be read is never written over
@@ -398,12 +411,12 @@ do
     local hotbar_ui = require('hotbar_ui');
     local keyboard_ui = require('keyboard_ui');
     keyboard_ui.set_context(profiles.scopes('PLD', 'WAR'), bindings, function () end);
-    hotbar_ui.set_bindings(bindings);
+    hotbar_ui.set_bindings(bindings, hotbars.job_key('PLD', 'WAR'));
     keyboard_ui.open('hotbars');
 
     -- One frame as jobbinds.lua draws it, with this input
     local function frame(name, given)
-        input = given or {};
+        input, seen = given or {}, {};
         local ok, err = pcall(function ()
             style.frame();
             recasts.frame();
@@ -425,9 +438,28 @@ do
     eq('key typed', bar.slots[1].key, 'G');
     frame('hover the key note', { hover = '##jb_slot_runs' });
     frame('type a label', { type = { '##jb_slot_label', 'Enmity' } });
-    eq('label typed', bar.slots[1].label, 'Enmity');
+    eq('label typed for the job', bar.slots[1].jobs and bar.slots[1].jobs.PLD_WAR.label, 'Enmity');
+    eq('label shows on the job', select(2, hotbar_ui.resolve(bar.slots[1])), 'Enmity');
+
+    -- On another job the slot has the key's label until one is set there
+    hotbar_ui.set_bindings(bindings, hotbars.job_key('NIN', 'WAR'));
+    frame('another job');
+    eq('another job takes the key\'s label', select(2, hotbar_ui.resolve(bar.slots[1])), 'Flash');
+    frame('label on another job', { type = { '##jb_slot_label', 'Nin' } });
+    eq('another job\'s label', bar.slots[1].jobs.NIN_WAR.label, 'Nin');
+    eq('first job\'s label kept', bar.slots[1].jobs.PLD_WAR.label, 'Enmity');
+    frame('clear it there', { type = { '##jb_slot_label', '' } });
+    eq('cleared job forgotten', bar.slots[1].jobs.NIN_WAR, nil);
+    hotbar_ui.set_bindings(bindings, hotbars.job_key('PLD', 'WAR'));
+
     frame('clear the label', { type = { '##jb_slot_label', '  ' } });
-    eq('label back to auto', bar.slots[1].label, nil);
+    eq('label back to auto, nothing left', bar.slots[1].jobs, nil);
+
+    -- Before a job is known, labels and recasts can't be set
+    hotbar_ui.set_bindings(bindings, nil);
+    frame('no job');
+    eq('no label field without a job', seen['##jb_rc_auto'], nil);
+    hotbar_ui.set_bindings(bindings, hotbars.job_key('PLD', 'WAR'));
 
     frame('add tp', { click = '##jb_add_tp' });
     eq('tp added', bar.conditions[1] and bar.conditions[1].kind, 'tp');
@@ -447,17 +479,23 @@ do
     frame('search', { type = { '##jb_slot_search', 'sent' } });
     frame('search shows matches', { hover = '##jb_match_1' });
     frame('pick a match', { click = '##jb_match_1' });
+    local function picked()
+        return bar.slots[1].jobs and bar.slots[1].jobs.PLD_WAR and bar.slots[1].jobs.PLD_WAR.recasts;
+    end
     local names = {};
-    for _, rc in ipairs(bar.slots[1].recasts or {}) do
+    for _, rc in ipairs(picked() or {}) do
         names[#names + 1] = rc.name;
     end
     eq('auto recasts kept, match added', table.concat(names, ','), 'Flash,Provoke,Sentinel');
     frame('remove a recast', { click = '##jb_rc_1' });
-    eq('recast removed', #bar.slots[1].recasts, 2);
+    eq('recast removed', #picked(), 2);
+    hotbar_ui.set_bindings(bindings, hotbars.job_key('NIN', 'WAR'));
+    eq('another job keeps auto recasts', #select(3, hotbar_ui.resolve(bar.slots[1])), 2);
+    hotbar_ui.set_bindings(bindings, hotbars.job_key('PLD', 'WAR'));
     frame('none', { click = '##jb_rc_none' });
-    eq('none picked', #bar.slots[1].recasts, 0);
+    eq('none picked', #picked(), 0);
     frame('auto', { click = '##jb_rc_auto' });
-    eq('auto picked', bar.slots[1].recasts, nil);
+    eq('auto picked, nothing left', bar.slots[1].jobs, nil);
 
     frame('more slots', { hold = '##jb_bar_count_up' });
     eq('slot added', #bar.slots, 11);
@@ -476,9 +514,9 @@ do
     eq('label text down', bar.label_text, hotbars.DEFAULT_LABEL_TEXT - 1);
     frame('release');
     bar.label_text = hotbars.MAX_TEXT; -- a two-line label this tall falls back to one line
-    bar.slots[2].label = 'Shield Bash';
+    bar.slots[1].jobs = { PLD_WAR = { label = 'Shield Bash' } };
     frame('huge label');
-    bar.slots[2].label = nil;
+    bar.slots[1].jobs = nil;
     frame('next slot', { hold = '##jb_slot_step_up' });
     eq('slot two picked', hotbars.edit.slot, 2);
     frame('release');
@@ -525,7 +563,23 @@ do
     frame('click a slot', { click = '##jb_slot_1_1' });
     eq('slot ran its key', game.sent[1], '/ma Flash <t>');
     frame('hover a slot', { hover = '##jb_slot_1_1' });
-    frame('hover an empty slot', { hover = '##jb_slot_1_3' });
+
+    -- A slot whose key does nothing on this job is a gap; a bar with none bound, no window
+    eq('bound slot drawn', seen['##jb_slot_1_1'], true);
+    eq('unbound slot hidden', seen['##jb_slot_1_2'], nil);
+    eq('slot with no key hidden', seen['##jb_slot_1_3'], nil);
+    eq('bar drawn', seen['JobBinds bar###jb_bar_1'], true);
+    frame('click a hidden slot', { click = '##jb_slot_1_2' });
+    eq('hidden slot never clicked', seen['##jb_slot_1_2'], nil);
+    hotbar_ui.set_bindings({}, hotbars.job_key('WHM', 'BLM'));
+    frame('nothing bound');
+    eq('a bar with nothing bound has no window', seen['JobBinds bar###jb_bar_1'], nil);
+    keyboard_ui.open('hotbars');
+    frame('nothing bound, in the editor', { hover = '##jb_slot_1_2' });
+    eq('the editor shows every slot', seen['##jb_slot_1_2'], true);
+    eq('the editor shows the bar', seen['JobBinds bar###jb_bar_1'], true);
+    keyboard_ui.is_open[1] = false;
+    hotbar_ui.set_bindings(bindings, hotbars.job_key('PLD', 'WAR'));
 
     -- Delete asks once
     keyboard_ui.open('hotbars');

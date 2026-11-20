@@ -1,9 +1,10 @@
 --[[
 * JobBinds hotbars on screen. Each bar is a borderless window of slots: a slot
 * shows its key, a label, and while a recast it watches is running, a dark
-* fade with the seconds left. Clicking a slot runs its key's binding.
+* fade with the seconds left. Clicking a slot runs its key's binding. A slot
+* whose key isn't bound for the current job isn't drawn, leaving its gap.
 *
-* While the window's Hotbars page is open every bar shows, a bar whose
+* While the window's Hotbars page is open every bar and slot shows, a bar whose
 * conditions don't hold now faded. A tab with the bar's name moves it, and
 * clicking a slot picks it for the page to edit.
 --]]
@@ -32,6 +33,7 @@ local BAR_FLAGS = ImGuiWindowFlags_NoTitleBar + ImGuiWindowFlags_NoResize + ImGu
     + ImGuiWindowFlags_NoFocusOnAppearing + ImGuiWindowFlags_NoBringToFrontOnFocus;
 
 local by_id = {};          -- chord id -> { binding, label, recasts }: what each bound key runs now
+local job = nil;           -- the job/subjob now ('PLD_WAR'), whose labels and recasts the slots show
 local broken = nil;        -- why the bars stopped drawing, until /jb reload
 local drag = nil;          -- { bar, x, y }: the bar being moved and where it was
 local was_cooling, flash_at = {}, {};
@@ -60,14 +62,21 @@ function hotbar_ui.combo(key)
     return (chord.ctrl and 'Ctrl+' or '') .. (chord.alt and 'Alt+' or '') .. (chord.shift and 'Shift+' or '') .. chord.key;
 end
 
--- The bindings in force (profiles.effective's list): what each slot's key runs,
+-- The bindings in force (profiles.effective's list) and the job/subjob they're
+-- for ('PLD_WAR', or nil before a job is known): what each slot's key runs,
 -- with the label and recasts a slot takes from it when it sets none.
-function hotbar_ui.set_bindings(bindings)
+function hotbar_ui.set_bindings(bindings, job_key)
     by_id = {};
     for _, binding in ipairs(bindings) do
         local list, label = recasts.from_lines(binding.lines);
         by_id[binding.id] = { binding = binding, label = label, recasts = list };
     end
+    job = job_key;
+end
+
+-- The job/subjob the slots show ('PLD_WAR'), or nil
+function hotbar_ui.job()
+    return job;
 end
 
 -- What a key runs now, or nil
@@ -75,11 +84,14 @@ function hotbar_ui.bound(key)
     return key and by_id[key] or nil;
 end
 
--- A slot as it shows now: what its key runs (or nil), its label, its recasts
+-- A slot as it shows now: what its key runs (or nil), its label, its recasts,
+-- and its own settings for this job (or nil)
 function hotbar_ui.resolve(slot)
     local entry = hotbar_ui.bound(slot.key);
-    local label = slot.label or (entry and entry.label) or '';
-    return entry, label, slot.recasts or (entry and entry.recasts) or {};
+    local own = hotbars.for_job(slot, job);
+    local label = own and own.label or (entry and entry.label) or '';
+    local list = own and own.recasts or (entry and entry.recasts) or {};
+    return entry, label, list, own;
 end
 
 -- Draw the bars again after an error (/jb reload)
@@ -117,23 +129,15 @@ local function label_lines(label, room, font, px)
     return { style.fit(best[1], room, font, px), style.fit(best[2], room, font, px) };
 end
 
--- What the tooltip says about a slot outside the editor
+-- What the tooltip says about a slot outside the editor (where only bound slots show)
 local function describe(slot, entry, list)
-    if not slot.key then
-        return 'Empty slot';
-    end
-    local lines = {};
-    if not entry then
-        lines[1] = hotbar_ui.combo(slot.key) .. ' is not bound for this job';
-    else
-        lines[1] = ('%s  [%s]'):format(hotbar_ui.combo(slot.key), entry.binding.scope.label);
-        for i, command in ipairs(entry.binding.lines) do
-            if i > 8 then
-                lines[#lines + 1] = '...';
-                break;
-            end
-            lines[#lines + 1] = command;
+    local lines = { ('%s  [%s]'):format(hotbar_ui.combo(slot.key), entry.binding.scope.label) };
+    for i, command in ipairs(entry.binding.lines) do
+        if i > 8 then
+            lines[#lines + 1] = '...';
+            break;
         end
+        lines[#lines + 1] = command;
     end
     for _, rc in ipairs(list) do
         local left = recasts.left(rc);
@@ -145,6 +149,9 @@ end
 local function draw_slot(dl, bar, bar_i, slot_i, slot, x, y, s, alpha, editing)
     local id = ('##jb_slot_%d_%d'):format(bar_i, slot_i);
     local entry, label, list = hotbar_ui.resolve(slot);
+    if not entry and not editing then
+        return; -- its key does nothing on this job: a gap, out of the editor
+    end
     local hovered, clicked = style.hit(id, x, y, s, s);
 
     -- The longest of its recasts: the slot is ready once they all are
@@ -217,7 +224,15 @@ local function draw_slot(dl, bar, bar_i, slot_i, slot, x, y, s, alpha, editing)
     end
 
     if hovered then
-        style.tooltip(editing and ('Slot %d: click to edit it'):format(slot_i) or describe(slot, entry, list));
+        if not editing then
+            style.tooltip(describe(slot, entry, list));
+        elseif entry then
+            style.tooltip(('Slot %d: click to edit it'):format(slot_i));
+        else
+            local why = slot.key and (hotbar_ui.combo(slot.key) .. ' isn\'t bound for ' .. (job and hotbars.job_label(job) or 'this job'))
+                or 'It has no key';
+            style.tooltip(('Slot %d: click to edit it.\nHidden when this page is closed: %s.'):format(slot_i, why));
+        end
     end
     if clicked then
         if editing then
@@ -309,6 +324,17 @@ local function draw_bar(i, bar, editing, shown, sw, sh)
     end
 end
 
+-- Whether any of a bar's slots has a key bound on this job. One with none has
+-- nothing to show, and no window: an empty one would still take the mouse.
+local function any_bound(bar)
+    for _, slot in ipairs(bar.slots) do
+        if hotbar_ui.bound(slot.key) then
+            return true;
+        end
+    end
+    return false;
+end
+
 -- Every frame, after style.frame() and recasts.frame(). editing: the window's
 -- Hotbars page is open.
 function hotbar_ui.render(editing)
@@ -325,9 +351,10 @@ function hotbar_ui.render(editing)
     local snap = conditions.snapshot();
     local ok, err = pcall(function ()
         for i, bar in ipairs(list) do
-            local shown = conditions.met(bar.conditions, snap);
-            if shown or editing then
-                draw_bar(i, bar, editing, shown, sw, sh);
+            if editing then
+                draw_bar(i, bar, true, conditions.met(bar.conditions, snap), sw, sh);
+            elseif any_bound(bar) and conditions.met(bar.conditions, snap) then
+                draw_bar(i, bar, false, true, sw, sh);
             end
         end
     end);

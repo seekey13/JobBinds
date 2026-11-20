@@ -81,16 +81,19 @@ A hotbar is a row, column or grid of slots on screen. Each slot shows a key, a l
 an ability or spell the key uses is recasting, a dark fade with the seconds left. Click a slot to run its key.
 
 Open the **Hotbars** page at the top of the window (or type `/jb bars`) and click **New bar**. While the page is open
-every bar is shown with a tab above it: drag the tab to move the bar, and click a slot to edit it.
+every bar and slot is shown with a tab above the bar: drag the tab to move the bar, and click a slot to edit it.
 
 - **Bar**: its name, how many slots (up to 40), how many columns (one column per slot for a single row, one column for a
   single column, anything in between for a grid), the slot size, and the text size of the key in each slot's corner
   and of its label.
 - **Slot**: the key it shows, written as in the profile files (`1`, `^G` for Ctrl+G, `!C` for Alt+C, `+1` for Shift+1).
-  The slot runs whatever that key is bound to for your current job, so one bar works for every job.
-- **Label**: leave it empty to take the name from the key's commands (`/ma Holy <t>` shows *Holy*), or type your own.
-- **Recasts**: **Auto** takes the recasts of the abilities and spells the key's commands use. Search to pick your own
-  instead (one or several: the slot shows the longest), or pick **None**.
+  The slot runs whatever that key is bound to for your current job, so one bar works for every job. On a job where the
+  key isn't bound in any profile that applies (the job/subjob's, the job's, the subjob's or Global), the slot is hidden
+  and leaves a gap, so the other keys stay where they are. A bar with no key bound on that job isn't shown at all.
+- **Label**: set for the job/subjob you're on now. Leave it empty to take the name from the key's commands
+  (`/ma Holy <t>` shows *Holy*), or type your own: a label typed on PLD/WAR shows only on PLD/WAR.
+- **Recasts**: also for the job/subjob you're on now. **Auto** takes the recasts of the abilities and spells the key's
+  commands use. Search to pick your own instead (one or several: the slot shows the longest), or pick **None**.
 
 A new bar starts on the keys 1 to 0, the next on Shift+1 to Shift+0.
 
@@ -180,7 +183,8 @@ Open an issue or pull request on the [GitHub repository](https://github.com/seek
 
 ### Version 2.1
 - Hotbars: rows, columns or grids of your keys on screen, moved by dragging
-- Slots take their label and recasts from what the key runs for the current job, or set their own
+- Slots take their label and recasts from what the key runs for the current job, or set their own for each job/subjob
+- A slot whose key isn't bound on the current job is hidden
 - Recast countdowns: a fade and the seconds left, for one or more abilities and spells per slot
 - Conditions to show a bar only at times: TP, HP%, MP%, Ctrl/Alt/Shift held, engaged, a buff up or missing
 - Click a slot to run its key

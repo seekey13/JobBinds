@@ -47,7 +47,7 @@ local function refresh()
     local bindings = main and profiles.effective(scopes) or {};
     engine.apply(bindings);
     keyboard_ui.set_context(scopes, bindings, refresh);
-    hotbar_ui.set_bindings(bindings);
+    hotbar_ui.set_bindings(bindings, hotbars.job_key(main, sub));
     return #bindings, main, sub;
 end
 

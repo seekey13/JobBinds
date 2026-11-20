@@ -45,7 +45,7 @@ local HINTS = {
 -- The fields' text. Filled from the bar and slot picked when another is picked.
 local buf = { name = { '' }, key = { '' }, label = { '' }, search = { '' } };
 local cond_bufs = setmetatable({}, { __mode = 'k' }); -- condition -> its value field's { text }
-local loaded_bar, loaded_slot = nil, nil;
+local loaded_bar, loaded_slot, loaded_job = nil, nil, nil;
 local confirm_bar, confirm_until = nil, 0;            -- Delete asks once
 local last_search, last_matches = nil, {};
 
@@ -63,16 +63,17 @@ local function describe(binding)
     return #binding.lines > 1 and (first .. ' ...') or first;
 end
 
-local function sync(bar, slot)
+local function sync(bar, slot, job)
     if bar ~= loaded_bar then
         buf.name[1] = bar.name;
         loaded_bar = bar;
     end
-    if slot ~= loaded_slot then
+    if slot ~= loaded_slot or job ~= loaded_job then
+        local own = hotbars.for_job(slot, job);
         buf.key[1] = slot.key or '';
-        buf.label[1] = slot.label or '';
+        buf.label[1] = own and own.label or '';
         buf.search[1] = '';
-        loaded_slot = slot;
+        loaded_slot, loaded_job = slot, job;
     end
 end
 
@@ -87,11 +88,18 @@ local function note(dl, x, cy, text, room, color)
     style.text_mid(dl, x, cy, style.fit(text, room, font, px), color or P.dim, font, px);
 end
 
--- Spaced capitals in teal, then a hairline, as the Keys page's BINDINGS
-local function heading(dl, x, y, right, text)
+-- Spaced capitals in teal, then a hairline, as the Keys page's BINDINGS, and
+-- an aside at the right end when there is one
+local function heading(dl, x, y, right, text, aside)
     local cy = y + S(6) + S(HEAD_H) / 2;
     local w = style.text_spaced(dl, x, cy, text, P.teal, style.fonts.semi_italic, S(style.SMALL), math.max(1, S(1.2)));
-    style.line(dl, x + w + S(10), cy, right, cy, P.line);
+    local line_end = right;
+    if aside then
+        local font, px = style.fonts.text, S(style.SMALL);
+        style.text_right(dl, right, cy, aside, P.dim, font, px);
+        line_end = right - style.measure(aside, font, px) - S(10);
+    end
+    style.line(dl, x + w + S(10), cy, line_end, cy, P.line);
 end
 
 -- A faint hint in a field while it's empty
@@ -136,22 +144,33 @@ local function wrap(widths, room)
     return lines;
 end
 
--- Give a slot this recast. A slot on auto starts from the recasts it had.
-local function add_recast(slot, rc)
-    if not slot.recasts then
+-- Give a slot this recast on a job. A slot on auto there starts from the recasts it had.
+local function add_recast(slot, job, rc)
+    local own = hotbars.for_job(slot, job, true);
+    if not own.recasts then
         local _, _, list = hotbar_ui.resolve(slot);
-        slot.recasts = {};
+        own.recasts = {};
         for _, have in ipairs(list) do
-            slot.recasts[#slot.recasts + 1] = { kind = have.kind, id = have.id, name = have.name };
+            own.recasts[#own.recasts + 1] = { kind = have.kind, id = have.id, name = have.name };
         end
     end
-    for _, have in ipairs(slot.recasts) do
+    for _, have in ipairs(own.recasts) do
         if have.kind == rc.kind and have.id == rc.id then
             return;
         end
     end
-    slot.recasts[#slot.recasts + 1] = { kind = rc.kind, id = rc.id, name = rc.name };
+    own.recasts[#own.recasts + 1] = { kind = rc.kind, id = rc.id, name = rc.name };
     hotbars.mark_dirty();
+end
+
+-- Set a slot's own recasts on a job: a list, {} for none, nil for auto
+local function set_recasts(slot, job, list)
+    local own = hotbars.for_job(slot, job, list ~= nil);
+    if own then
+        own.recasts = list;
+        hotbars.prune(slot, job);
+        hotbars.mark_dirty();
+    end
 end
 
 -- The search's matches, less those the slot has
@@ -412,14 +431,19 @@ local function plan_conditions(add, bar, width)
 end
 
 -- The slot's rows. They keep to the slot planned: a row above them may pick
--- another bar (and no slot) part way through the frame.
+-- another bar (and no slot) part way through the frame. The label and recasts
+-- are the current job/subjob's: each job/subjob has its own.
 local function plan_slot(add, bar, width)
     local edit = hotbars.edit;
     local index = edit.slot;
     local slot = bar.slots[index];
     local entry = hotbar_ui.bound(slot.key);
+    local job = hotbar_ui.job();
+    local job_name = job and hotbars.job_label(job) or nil;
 
-    add(S(6) + S(HEAD_H), function (dl, x, y, right) heading(dl, x, y, right, 'SLOT'); end);
+    add(S(6) + S(HEAD_H), function (dl, x, y, right)
+        heading(dl, x, y, right, 'SLOT', job_name and ('Label and recasts for ' .. job_name) or nil);
+    end);
 
     -- Which slot, and Clear slot
     add(S(ROW_H), function (dl, x, y, right)
@@ -437,7 +461,7 @@ local function plan_slot(add, bar, width)
             bar.slots[index] = {};
             hotbars.mark_dirty();
         end
-        style.tip('Empty this slot: no key, label or recasts');
+        style.tip('Empty this slot: its key, and its labels and recasts on every job');
     end);
 
     -- Key, and what it runs now
@@ -467,29 +491,41 @@ local function plan_slot(add, bar, width)
                 style.tooltip(table.concat(now.binding.lines, '\n'));
             end
         else
-            note(dl, nx, cy, 'Not bound for this job', room, P.dim);
+            note(dl, nx, cy, ('Not bound for %s: hidden when this page is closed'):format(job_name or 'this job'),
+                room, P.dim);
         end
     end);
 
-    -- Label: empty takes the one from what the key runs
+    if not job then
+        add(S(ROW_H), function (dl, x, y, right)
+            note(dl, x + S(LABEL_W), y + S(ROW_H) / 2, 'Labels and recasts are set for each job: log in to set them.',
+                right - x - S(LABEL_W), P.dim);
+        end);
+        return;
+    end
+
+    -- Label on this job: empty takes the one from what the key runs
     add(S(ROW_H), function (dl, x, y, right)
         local cy = y + S(ROW_H) / 2;
         row_label(dl, x, cy, 'Label');
         local fx, fw = x + S(LABEL_W), S(200);
         if field('##jb_slot_label', fx, cy, fw, buf.label, 64) then
             local text = trim(buf.label[1]);
-            slot.label = text ~= '' and text or nil;
+            hotbars.for_job(slot, job, true).label = text ~= '' and text or nil;
+            hotbars.prune(slot, job);
             hotbars.mark_dirty();
         end
         local auto = entry and entry.label or '';
         placeholder(dl, fx, cy - S(FIELD_H) / 2, buf.label, auto);
-        if not slot.label then
-            note(dl, fx + fw + S(12), cy, auto ~= '' and 'Empty: taken from the key' or 'Empty', right - fx - fw - S(12), P.dim);
-        end
+        local own = hotbars.for_job(slot, job);
+        local said = own and own.label and (job_name .. ' only')
+            or auto ~= '' and ('Empty: taken from the key on ' .. job_name) or 'Empty';
+        note(dl, fx + fw + S(12), cy, said, right - fx - fw - S(12), P.dim);
     end);
 
-    -- Recasts: those picked, or what auto finds
-    local picked = slot.recasts;
+    -- Recasts on this job: those picked, or what auto finds
+    local own = hotbars.for_job(slot, job);
+    local picked = own and own.recasts;
     local widths = {};
     for i, rc in ipairs(picked or {}) do
         widths[i] = removable_width(rc.name ~= '' and rc.name or '?');
@@ -538,18 +574,18 @@ local function plan_slot(add, bar, width)
         field('##jb_slot_search', fx, cy, fw, buf.search, 64);
         placeholder(dl, fx, cy - S(FIELD_H) / 2, buf.search, 'Add: type an ability or spell');
 
+        local now = hotbars.for_job(slot, job);
+        local list = now and now.recasts;
         local at = fx + fw + S(12);
-        if style.chip('##jb_rc_auto', at, cy, 'Auto', slot.recasts == nil) then
-            slot.recasts = nil;
-            hotbars.mark_dirty();
+        if style.chip('##jb_rc_auto', at, cy, 'Auto', list == nil) then
+            set_recasts(slot, job, nil);
         end
-        style.tip('Take the recasts from the abilities and spells the key uses');
+        style.tip('On ' .. job_name .. ', take the recasts from the abilities and spells the key uses');
         at = at + auto_w + S(CHIP_GAP);
-        if style.chip('##jb_rc_none', at, cy, 'None', slot.recasts ~= nil and #slot.recasts == 0) then
-            slot.recasts = {};
-            hotbars.mark_dirty();
+        if style.chip('##jb_rc_none', at, cy, 'None', list ~= nil and #list == 0) then
+            set_recasts(slot, job, {});
         end
-        style.tip('Show no recast on this slot');
+        style.tip('Show no recast on this slot on ' .. job_name);
     end);
 
     if #found > 0 then
@@ -570,7 +606,7 @@ local function plan_slot(add, bar, width)
                 style.text_right(dl, fx + fw - S(9), cy, rc.kind == 'ja' and 'Ability' or 'Spell', P.dim, font,
                     S(style.SMALL));
                 if clicked then
-                    add_recast(slot, rc);
+                    add_recast(slot, job, rc);
                     buf.search[1] = '';
                 end
             end
@@ -603,7 +639,7 @@ function hotbar_page.plan(width)
         if not edit.slot or edit.slot < 1 or edit.slot > #bar.slots then
             edit.slot = 1;
         end
-        sync(bar, bar.slots[edit.slot]);
+        sync(bar, bar.slots[edit.slot], hotbar_ui.job());
         plan_bar(add, bar);
         plan_conditions(add, bar, width);
         plan_slot(add, bar, width);
