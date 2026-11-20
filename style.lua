@@ -422,8 +422,10 @@ local CLEAR = { 0, 0, 0, 0 };
 
 -- A text field over a sunken box, w by h with its top left at (x, y); buf is
 -- its { text }. With multiline it takes several lines. The text is in ImGui's
--- own font: it is what the user typed, in the client's language.
+-- own font: it is what the user typed, in the client's language. Returns
+-- whether the text changed this frame.
 function style.field(id, x, y, w, h, buf, max, multiline)
+    local before = buf[1];
     local dl = imgui.GetWindowDrawList();
     fill(dl, x, y, w, h, P.field, S(5));
 
@@ -460,6 +462,62 @@ function style.field(id, x, y, w, h, buf, max, multiline)
         error(lit, 0);
     end
     outline(dl, x, y, w, h, mix(P.field_edge, P.accent_lo, lit), S(5));
+    return buf[1] ~= before;
+end
+
+-- A number between two arrows, in a sunken box: lo to hi by step. Holding an
+-- arrow repeats it. Returns the value, whether it changed, its width.
+local held_since = {};
+
+function style.stepper_width()
+    return S(24) * 2 + S(42);
+end
+
+function style.stepper(id, x, cy, value, lo, hi, step)
+    step = step or 1;
+    local bw, vw, h = S(24), S(42), S(24);
+    local w = bw * 2 + vw;
+    local y = cy - h / 2;
+    local dl = imgui.GetWindowDrawList();
+    fill(dl, x, y, w, h, P.well, S(4));
+    outline(dl, x, y, w, h, P.well_edge, S(4));
+
+    local changed = false;
+    local function arrow(sid, ax, delta, enabled)
+        local hovered, _, held = hit(sid, ax, y, bw, h);
+        local t = ease(sid, (hovered and enabled) and 1 or 0, 22);
+        if t > 0.01 then
+            fill(dl, ax, y, bw, h, '#FFFFFF', S(4), 0.06 * t);
+        end
+        -- a minus or a plus, drawn: no font has to have the glyph
+        local color = style.u32(enabled and mix(P.text2, P.white, t) or P.faint);
+        local cx, r, thick = ax + bw / 2, S(4.5), math.max(1, S(1.6));
+        dl:AddLine({ cx - r, cy }, { cx + r, cy }, color, thick);
+        if delta > 0 then
+            dl:AddLine({ cx, cy - r }, { cx, cy + r }, color, thick);
+        end
+
+        -- a press steps once; held past 0.4 s, it steps every 0.06 s
+        local now, go = os.clock(), false;
+        if held and enabled then
+            local next_at = held_since[sid];
+            if not next_at then
+                held_since[sid], go = now + 0.4, true;
+            elseif now >= next_at then
+                held_since[sid], go = now + 0.06, true;
+            end
+        else
+            held_since[sid] = nil;
+        end
+        if go then
+            value = clamp(value + delta, lo, hi);
+            changed = true;
+        end
+    end
+    arrow(id .. '_dn', x, -step, value > lo);
+    arrow(id .. '_up', x + bw + vw, step, value < hi);
+    style.text_centred(dl, x + bw + vw / 2, cy, tostring(value), P.text, fonts.text, S(style.BODY - 1));
+    return value, changed, w;
 end
 
 return style;

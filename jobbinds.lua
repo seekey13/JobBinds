@@ -8,15 +8,19 @@
 
 addon.name      = 'JobBinds';
 addon.author    = 'Seekey';
-addon.version   = '2.0';
-addon.desc      = 'Key bindings that follow your job and subjob.';
+addon.version   = '2.1';
+addon.desc      = 'Key bindings that follow your job and subjob, and hotbars that show them.';
 addon.link      = 'https://github.com/seekey13/jobbinds';
 
 require('common');
 local chat = require('chat');
 local profiles = require('profiles');
 local engine = require('engine');
+local style = require('style');
 local keyboard_ui = require('keyboard_ui');
+local hotbars = require('hotbars');
+local hotbar_ui = require('hotbar_ui');
+local recasts = require('recasts');
 local import = require('import');
 
 local function printf(fmt, ...) print(chat.header(addon.name) .. chat.message(fmt:format(...))); end
@@ -35,14 +39,24 @@ local function job_name(id)
     return (name ~= nil and name ~= '') and name:upper() or nil;
 end
 
--- Bind the keys for the applied job from its profiles, and show them in the window.
+-- Bind the keys for the applied job from its profiles, and show them in the
+-- window and on the hotbars.
 local function refresh()
     local main, sub = job_name(applied_main), job_name(applied_sub);
     local scopes = profiles.scopes(main, sub);
     local bindings = main and profiles.effective(scopes) or {};
     engine.apply(bindings);
     keyboard_ui.set_context(scopes, bindings, refresh);
+    hotbar_ui.set_bindings(bindings, hotbars.job_key(main, sub));
     return #bindings, main, sub;
+end
+
+local function load_hotbars()
+    local ok, err = hotbars.load();
+    if not ok then
+        printf('%s', err);
+    end
+    hotbar_ui.reset();
 end
 
 -- The job is read twice a second and acted on once it reads the same twice
@@ -82,11 +96,18 @@ ashita.events.register('load', 'jobbinds_load', function ()
             printf('Imported %d JobBinds 1.x profile%s from the scripts folder.', imported, imported == 1 and '' or 's');
         end
     end
+    load_hotbars();
     refresh();
 end);
 
 ashita.events.register('unload', 'jobbinds_unload', function ()
     engine.clear();
+    if hotbars.is_dirty() then
+        local ok, err = hotbars.save(); -- a change made in the last moment before unloading
+        if not ok then
+            printf('Could not save hotbars.lua: %s', tostring(err));
+        end
+    end
 end);
 
 ashita.events.register('d3d_present', 'jobbinds_present', function ()
@@ -96,7 +117,13 @@ ashita.events.register('d3d_present', 'jobbinds_present', function ()
         poll_job();
     end
     engine.tick();
+
+    style.frame(); -- once a frame, for the bars and the window both
+    recasts.frame();
+    hotbar_ui.render(keyboard_ui.editing_hotbars());
     keyboard_ui.render();
+    style.tooltips();
+    hotbars.save_if_idle();
 end);
 
 ashita.events.register('command', 'jobbinds_command', function (e)
@@ -115,15 +142,20 @@ ashita.events.register('command', 'jobbinds_command', function (e)
         keyboard_ui.toggle();
     elseif action == 'run' then
         engine.run(tonumber(args[3])); -- what the bound keys send
+    elseif action == 'bars' or action == 'hotbars' then
+        keyboard_ui.open('hotbars');
     elseif action == 'reload' then
         profiles.reload();
+        load_hotbars();
         local count = refresh();
-        printf('Profiles reloaded: %d key%s bound.', count, count == 1 and '' or 's');
+        printf('Profiles and hotbars reloaded: %d key%s bound, %d hotbar%s.', count, count == 1 and '' or 's',
+            #hotbars.list(), #hotbars.list() == 1 and '' or 's');
     elseif action == 'import' then
         run_import();
     else
         printf('/jb         - open or close the keyboard window');
-        printf('/jb reload  - read the profile files again after editing them by hand');
+        printf('/jb bars    - open the window on its Hotbars page');
+        printf('/jb reload  - read the profile and hotbar files again after editing them by hand');
         printf('/jb import  - import JobBinds 1.x profiles from the scripts folder');
     end
 end);
