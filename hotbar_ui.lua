@@ -142,7 +142,7 @@ local function describe(slot, entry, list)
     return table.concat(lines, '\n');
 end
 
-local function draw_slot(dl, bar_i, slot_i, slot, x, y, s, alpha, editing)
+local function draw_slot(dl, bar, bar_i, slot_i, slot, x, y, s, alpha, editing)
     local id = ('##jb_slot_%d_%d'):format(bar_i, slot_i);
     local entry, label, list = hotbar_ui.resolve(slot);
     local hovered, clicked = style.hit(id, x, y, s, s);
@@ -188,10 +188,14 @@ local function draw_slot(dl, bar_i, slot_i, slot, x, y, s, alpha, editing)
     end
     style.outline(dl, x, y, s, s, mix(mix(edge, P.accent_lo, lit), P.accent, math.max(picked, flash)), r, alpha);
 
+    -- The key in the corner and the label, at the bar's text sizes
     local font = style.fonts.text;
+    local key_h = 0;
     if slot.key then
-        style.text(dl, x + S(3), y + S(1), slot.key, entry and P.text2 or P.faint, font,
-            math.max(S(9), round(s * 0.22)), alpha * (cooling and 0.6 or 1));
+        local px = S(bar.key_text);
+        _, key_h = style.measure(slot.key, font, px);
+        style.text(dl, x + S(3), y + S(1), slot.key, entry and P.text2 or P.faint, font, px,
+            alpha * (cooling and 0.6 or 1));
     end
     if cooling then
         -- the seconds take the label's place
@@ -199,10 +203,14 @@ local function draw_slot(dl, bar_i, slot_i, slot, x, y, s, alpha, editing)
         style.text_centred(dl, x + s / 2 + 1, y + s / 2 + 1, text, '#000000', style.fonts.semi, px, alpha * 0.8);
         style.text_centred(dl, x + s / 2, y + s / 2, text, P.white, style.fonts.semi, px, alpha);
     elseif label ~= '' then
-        local px = math.max(S(9), round(s * 0.25));
+        local px = S(bar.label_text);
         local lines = label_lines(label, s - S(6), font, px);
         local _, lh = style.measure('Ag', font, px);
-        local cy = y + s / 2 + (slot.key and s * 0.08 or 0) - lh * (#lines - 1) / 2;
+        if #lines > 1 and lh * #lines > s - S(4) - key_h / 2 then
+            lines = { style.fit(label, s - S(6), font, px) }; -- two lines this tall don't fit: one, cut
+        end
+        -- centred a little under the middle, clear of the key
+        local cy = y + s / 2 + key_h / 4 - lh * (#lines - 1) / 2;
         for n, line in ipairs(lines) do
             style.text_centred(dl, x + s / 2, cy + (n - 1) * lh, line, entry and P.text or P.dim, font, px, alpha);
         end
@@ -290,7 +298,7 @@ local function draw_bar(i, bar, editing, shown, sw, sh)
             end
             for n, slot in ipairs(bar.slots) do
                 local col, row = (n - 1) % columns, math.floor((n - 1) / columns);
-                draw_slot(dl, i, n, slot, x + col * (s + gap), y + row * (s + gap), s, alpha, editing);
+                draw_slot(dl, bar, i, n, slot, x + col * (s + gap), y + row * (s + gap), s, alpha, editing);
             end
         end);
     end

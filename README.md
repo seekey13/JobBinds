@@ -84,7 +84,8 @@ Open the **Hotbars** page at the top of the window (or type `/jb bars`) and clic
 every bar is shown with a tab above it: drag the tab to move the bar, and click a slot to edit it.
 
 - **Bar**: its name, how many slots (up to 40), how many columns (one column per slot for a single row, one column for a
-  single column, anything in between for a grid), and the slot size.
+  single column, anything in between for a grid), the slot size, and the text size of the key in each slot's corner
+  and of its label.
 - **Slot**: the key it shows, written as in the profile files (`1`, `^G` for Ctrl+G, `!C` for Alt+C, `+1` for Shift+1).
   The slot runs whatever that key is bound to for your current job, so one bar works for every job.
 - **Label**: leave it empty to take the name from the key's commands (`/ma Holy <t>` shows *Holy*), or type your own.

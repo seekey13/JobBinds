@@ -4,7 +4,7 @@
 * profiles are).
 *
 *     return {
-*         { name = 'Main', x = 760, y = 940, columns = 10, size = 44,
+*         { name = 'Main', x = 760, y = 940, columns = 10, size = 44, key_text = 10, label_text = 11,
 *           conditions = { { kind = 'tp', op = '>=', value = 1000 } },
 *           slots = { { key = '1' }, { key = '^1', label = 'Holy' }, {} } },
 *     }
@@ -14,7 +14,8 @@
 * that, and so does recasts left out. recasts = {} shows none.
 *
 * The slots are #slots; columns of them make a row. x and y are the bar's top
-* left in screen pixels; size is a slot's side before the window's scale.
+* left in screen pixels; size is a slot's side, and key_text and label_text the
+* sizes of its key and label, before the window's scale.
 --]]
 
 local profiles = require('profiles');
@@ -25,6 +26,9 @@ local hotbars = {};
 hotbars.path = profiles.dir .. '\\hotbars.lua';
 hotbars.MAX_SLOTS = 40;
 hotbars.MIN_SIZE, hotbars.MAX_SIZE, hotbars.DEFAULT_SIZE = 28, 80, 44;
+-- The text on a bar's slots, in pixels before the scale: the key in the corner, and the label
+hotbars.MIN_TEXT, hotbars.MAX_TEXT = 6, 32;
+hotbars.DEFAULT_KEY_TEXT, hotbars.DEFAULT_LABEL_TEXT = 10, 11;
 hotbars.GAP = 4; -- between slots, before the scale
 
 -- The bar and slot being edited on the window's Hotbars page. Here so the bars
@@ -85,6 +89,8 @@ local function clean_bar(b, n)
         x = num(b.x, -10000, 10000, 100),
         y = num(b.y, -10000, 10000, 100),
         size = num(b.size, hotbars.MIN_SIZE, hotbars.MAX_SIZE, hotbars.DEFAULT_SIZE),
+        key_text = num(b.key_text, hotbars.MIN_TEXT, hotbars.MAX_TEXT, hotbars.DEFAULT_KEY_TEXT),
+        label_text = num(b.label_text, hotbars.MIN_TEXT, hotbars.MAX_TEXT, hotbars.DEFAULT_LABEL_TEXT),
         conditions = {},
         slots = {},
     };
@@ -135,8 +141,8 @@ hotbars.reload = hotbars.load;
 -- Writing ---------------------------------------------------------------------
 
 -- Keys in this order, the rest sorted after them
-local ORDER = { name = 1, x = 2, y = 3, columns = 4, size = 5, key = 6, label = 7,
-    kind = 8, op = 9, value = 10, is = 11, id = 12, conditions = 20, slots = 21, recasts = 22 };
+local ORDER = { name = 1, x = 2, y = 3, columns = 4, size = 5, key_text = 6, label_text = 7, key = 8, label = 9,
+    kind = 10, op = 11, value = 12, is = 13, id = 14, conditions = 20, slots = 21, recasts = 22 };
 
 local function scalar(v)
     if type(v) == 'string' then
@@ -268,7 +274,8 @@ function hotbars.new_bar(screen_w, screen_h, S)
         n = n + 1;
     end
 
-    local bar = { name = 'Bar ' .. n, size = hotbars.DEFAULT_SIZE, columns = 10, conditions = {}, slots = {} };
+    local bar = { name = 'Bar ' .. n, size = hotbars.DEFAULT_SIZE, columns = 10,
+        key_text = hotbars.DEFAULT_KEY_TEXT, label_text = hotbars.DEFAULT_LABEL_TEXT, conditions = {}, slots = {} };
     local prefix = fresh_keys();
     for i = 1, 10 do
         bar.slots[i] = prefix and { key = prefix .. (i % 10) } or {};

@@ -282,6 +282,28 @@ local function plan_bar(add, bar)
         note(dl, x + S(LABEL_W), y + S(NOTE_H) / 2 - S(3), shape .. '. Drag the bar\'s tab on screen to move it.',
             right - x - S(LABEL_W));
     end);
+
+    -- The text on the slots: the key in the corner, and the label
+    add(S(ROW_H), function (dl, x, y, right)
+        local cy = y + S(ROW_H) / 2;
+        local font, px = style.fonts.text, S(style.BODY - 1);
+        row_label(dl, x, cy, 'Key text');
+        local at = x + S(LABEL_W);
+        local v, changed, w = style.stepper('##jb_bar_key_text', at, cy, bar.key_text, hotbars.MIN_TEXT, hotbars.MAX_TEXT);
+        if changed then
+            bar.key_text = v;
+            hotbars.mark_dirty();
+        end
+
+        at = at + w + S(16);
+        style.text_mid(dl, at, cy, 'Label text', P.text2, font, px);
+        at = at + style.measure('Label text', font, px) + S(8);
+        v, changed = style.stepper('##jb_bar_label_text', at, cy, bar.label_text, hotbars.MIN_TEXT, hotbars.MAX_TEXT);
+        if changed then
+            bar.label_text = v;
+            hotbars.mark_dirty();
+        end
+    end);
 end
 
 -- One condition: its kind, which way, its value, a cross

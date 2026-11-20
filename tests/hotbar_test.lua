@@ -272,6 +272,8 @@ do
     eq('new bar first key', bar.slots[1].key, '1');
     eq('new bar last key', bar.slots[10].key, '0');
     eq('new bar centred', bar.x, (1920 - (10 * 44 + 9 * 4)) / 2);
+    eq('new bar key text', bar.key_text, hotbars.DEFAULT_KEY_TEXT);
+    eq('new bar label text', bar.label_text, hotbars.DEFAULT_LABEL_TEXT);
     hotbars.new_bar(1920, 1080, S);
     eq('second bar on shift', hotbars.list()[2].slots[1].key, '+1');
     eq('second bar above the first', hotbars.list()[2].y < bar.y, true);
@@ -283,6 +285,7 @@ do
     bar.slots[2].label = 'Holy "quoted"';
     bar.slots[2].recasts = { { kind = 'ma', id = 21, name = 'Holy' } };
     bar.slots[3].recasts = {};
+    bar.key_text, bar.label_text = 14, 18;
     local ok, err = hotbars.save();
     eq('save', ok, true);
     check('save error', ok, err);
@@ -293,6 +296,8 @@ do
     bar = list[1];
     eq('name read back', bar.name, 'Bar 1');
     eq('x read back', bar.x, (1920 - (10 * 44 + 9 * 4)) / 2);
+    eq('key text read back', bar.key_text, 14);
+    eq('label text read back', bar.label_text, 18);
     eq('conditions read back', #bar.conditions, 2);
     eq('buff missing read back', bar.conditions[2].is, false);
     eq('label with quotes read back', bar.slots[2].label, 'Holy "quoted"');
@@ -333,7 +338,7 @@ end
 -- Bad values are cleaned up
 do
     write([[return {
-        { name = '', x = 'abc', size = 500, columns = 0,
+        { name = '', x = 'abc', size = 500, columns = 0, key_text = 999, label_text = 'big',
           conditions = { { kind = 'nope' }, { kind = 'tp', value = 99999 } },
           slots = { { key = '  ^q ' }, 'junk', { recasts = { { kind = 'xx', id = 1 }, { kind = 'ja', id = '5' } } } } },
         'not a bar',
@@ -345,6 +350,8 @@ do
     eq('bad x defaulted', bar.x, 100);
     eq('size clamped', bar.size, hotbars.MAX_SIZE);
     eq('columns clamped', bar.columns, 1);
+    eq('key text clamped', bar.key_text, hotbars.MAX_TEXT);
+    eq('bad label text defaulted', bar.label_text, hotbars.DEFAULT_LABEL_TEXT);
     eq('unknown condition dropped', #bar.conditions, 1);
     eq('condition value clamped', bar.conditions[1].value, 3000);
     eq('key cleaned', bar.slots[1].key, '^Q');
@@ -462,6 +469,16 @@ do
     frame('bigger', { hold = '##jb_bar_size_up' });
     eq('size up by two', bar.size, 46);
     frame('release');
+    frame('bigger key', { hold = '##jb_bar_key_text_up' });
+    eq('key text up', bar.key_text, hotbars.DEFAULT_KEY_TEXT + 1);
+    frame('release');
+    frame('smaller label', { hold = '##jb_bar_label_text_dn' });
+    eq('label text down', bar.label_text, hotbars.DEFAULT_LABEL_TEXT - 1);
+    frame('release');
+    bar.label_text = hotbars.MAX_TEXT; -- a two-line label this tall falls back to one line
+    bar.slots[2].label = 'Shield Bash';
+    frame('huge label');
+    bar.slots[2].label = nil;
     frame('next slot', { hold = '##jb_slot_step_up' });
     eq('slot two picked', hotbars.edit.slot, 2);
     frame('release');
